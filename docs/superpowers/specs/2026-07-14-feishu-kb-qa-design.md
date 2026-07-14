@@ -140,6 +140,18 @@ data/config.json       : { providerId, custom{...}, topK, pageSize, feishuAppId,
 ```
 现有 mock 对话清空。对话按 `ownerOpenId` 过滤，各人只见自己的。
 
+## 11a. 多用户安全隔离（硬性约束，禁止越权）
+
+这是核心安全要求，实现时逐条落实并写测试覆盖：
+
+1. **身份绑定唯一**：每个 sessionToken 只映射到**一个**用户的 `{openId, userAccessToken, refreshToken}`。搜索/读文档**永远且只**用「当前请求这个用户的 userAccessToken」，飞书据此按该用户权限过滤——越权/私密文档天然搜不到。
+2. **禁用越权 token 做业务**：`app_access_token` / `tenant_access_token` **仅**用于 OAuth 换 token 这一步，**绝不**用于搜索/读文档（它们会绕过用户权限）。代码层面隔离，feishu.js 的业务方法只接受 userAccessToken 入参。
+3. **对话强隔离**：每个 conversation 带 `ownerOpenId`。读/写/删对话时，服务端**强制**校验 `conversation.ownerOpenId === req.user.openId`，不匹配返回 403；列表只返回本人对话。禁止用前端传的 id 直接取他人数据（IDOR 防护）。
+4. **会话失效即拒**：token 无效/过期且 refresh 失败 → 401，前端跳登录；不做任何降级到「公共/管理员」身份。
+5. **state 防 CSRF**：OAuth 的 state 参数由后端签发校验，回调时核对，防止授权码注入。
+6. **密钥不外泄**：app_secret、user_access_token、模型 API key 一律不下发前端；前端只见 `***`。
+7. **dev-stub 仅测试**：dev-stub 登录仅用于本地自动化测试，生产 `DEV_STUB_LOGIN=false`；且 dev-stub 用户也严格走同一套隔离逻辑。
+
 ## 12. 错误处理
 - 未登录/会话失效 → 401 → 前端跳登录页。
 - 搜索缺 scope → 明确提示「需在飞书应用开通 search:docs:read」。
