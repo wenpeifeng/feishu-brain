@@ -64,6 +64,18 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ 端口 ${PORT} 已被占用，服务无法启动。`);
+    console.error(`   可能是已有一个实例在跑。解决办法二选一：`);
+    console.error(`   1) 关掉占用它的进程：  lsof -ti:${PORT} | xargs kill -9`);
+    console.error(`   2) 换个端口启动：      PORT=3001 npm start\n`);
+    process.exit(1);
+  }
+  console.error('服务启动失败：', err.message);
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`Feishu KB QA server running at http://${HOST}:${PORT}`);
 });
