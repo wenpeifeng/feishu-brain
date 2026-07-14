@@ -99,60 +99,33 @@
       <div class="modal-body">
         <form id="settingsForm">
           <div class="form-group">
-            <label>LLM API Key</label>
-            <input type="password" name="openaiApiKey" placeholder="sk-...">
-            <div class="field-note" id="apiKeyNote">首次使用需要填写</div>
+            <label>AI 模型厂商</label>
+            <select id="providerSelect" name="providerId"></select>
           </div>
-          <div class="form-group">
-            <label>LLM 提供商</label>
-            <select name="llmProvider" id="llmProvider">
-              <option value="openai">OpenAI</option>
-              <option value="moonshot">Moonshot (Kimi)</option>
-              <option value="custom">自定义</option>
-            </select>
-          </div>
-
-          <button type="button" class="advanced-toggle" id="advancedToggle">高级设置 ▼</button>
-          <div class="advanced-fields" id="advancedFields">
+          <div id="customFields" style="display:none;">
+            <div class="form-group">
+              <label>Base URL</label>
+              <input type="text" id="customBaseUrl" placeholder="https://api.openai.com/v1">
+            </div>
             <div class="form-group">
               <label>模型名称</label>
-              <input type="text" name="llmModel" id="llmModel" placeholder="gpt-4o-mini">
+              <input type="text" id="customModel" placeholder="gpt-4o-mini">
             </div>
             <div class="form-group">
-              <label>LLM Base URL</label>
-              <input type="text" name="openaiBaseUrl" id="openaiBaseUrl" placeholder="https://api.openai.com/v1">
-            </div>
-            <div class="form-group">
-              <label>飞书 App ID</label>
-              <input type="text" name="appId" placeholder="cli_...">
-            </div>
-            <div class="form-group">
-              <label>飞书 App Secret</label>
-              <input type="password" name="appSecret" placeholder="保存后显示为 ***">
-            </div>
-            <div class="form-group">
-              <label>lark-cli 路径（留空使用 PATH）</label>
-              <input type="text" name="larkCliPath" placeholder="lark-cli">
-            </div>
-            <div class="form-group">
-              <label>飞书身份</label>
-              <select name="larkIdentity">
-                <option value="user">user</option>
-                <option value="bot">bot</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>搜索数量</label>
-                <input type="number" name="pageSize" min="1" max="20" value="9">
-              </div>
-              <div class="form-group">
-                <label>参与总结文档数</label>
-                <input type="number" name="topK" min="1" max="9" value="3">
-              </div>
+              <label>API Key</label>
+              <input type="password" id="customApiKey" placeholder="sk-...">
             </div>
           </div>
-
+          <div class="form-row">
+            <div class="form-group">
+              <label>搜索数量</label>
+              <input type="number" id="pageSizeInput" min="1" max="20" value="9">
+            </div>
+            <div class="form-group">
+              <label>参与总结文档数</label>
+              <input type="number" id="topKInput" min="1" max="9" value="3">
+            </div>
+          </div>
           <div class="form-actions">
             <button type="submit" class="btn-primary">保存</button>
           </div>

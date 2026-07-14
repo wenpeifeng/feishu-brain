@@ -840,3 +840,62 @@ body {
   color: var(--text-secondary);
   margin-top: 6px;
 }
+
+/* Streaming bubble animation */
+.message-bubble.streaming {
+  min-height: 40px;
+}
+
+/* AI disclaimer note */
+.ai-disclaimer {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 6px 0 12px;
+  max-width: 900px;
+  width: 100%;
+  align-self: flex-start;
+  text-align: left;
+}
+
+/* User menu / avatar dropdown */
+.user-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  min-width: 140px;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-menu-item:hover {
+  background: var(--bg);
+}
+
+.user-menu-item.danger {
+  color: #f54a45;
+}
+
+.user-menu-item.danger:hover {
+  background: #fff2f0;
+}
+
+/* Avatar relative positioning for dropdown */
+.user-avatar {
+  position: relative;
+}
+
