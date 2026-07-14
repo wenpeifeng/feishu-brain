@@ -133,30 +133,22 @@ async function runTests() {
       },
     });
 
-    const events = await collect(runRAGStream(USER, '问题', HISTORY, false, BASE_CONFIG));
+    // 忽略 status 进度事件；新顺序：tokens → references → sources
+    const events = (await collect(runRAGStream(USER, '问题', HISTORY, false, BASE_CONFIG)))
+      .filter(e => e.type !== 'status');
 
-    // Must have at least 3 events: references, ≥1 token, sources
-    if (events.length < 3) throw new Error(`too few events: ${events.length}`);
-
-    // First event: references
-    if (events[0].type !== 'references') throw new Error(`first event type=${events[0].type}`);
-    if (!Array.isArray(events[0].references)) throw new Error('references not array');
-
-    // Last event: sources
+    const types = events.map(e => e.type);
+    const tokenEvs = events.filter(e => e.type === 'token');
+    const refEv = events.find(e => e.type === 'references');
     const last = events[events.length - 1];
-    if (last.type !== 'sources') throw new Error(`last event type=${last.type}`);
-    if (!Array.isArray(last.sources)) throw new Error('sources not array');
 
-    // Middle events: all tokens
-    const middle = events.slice(1, -1);
-    for (const ev of middle) {
-      if (ev.type !== 'token') throw new Error(`middle event type=${ev.type}`);
-    }
+    if (tokenEvs.length < 2) throw new Error(`expected ≥2 token events, got ${tokenEvs.length}`);
+    if (!refEv || !Array.isArray(refEv.references)) throw new Error('missing references event');
+    if (last.type !== 'sources' || !Array.isArray(last.sources)) throw new Error(`last event type=${last.type}`);
 
-    // At least 2 token events (matching our mock yields)
-    if (middle.length < 2) throw new Error(`expected ≥2 token events, got ${middle.length}`);
+    // token 必须在 references 之前（先出答案，再出参考资料）
+    if (types.indexOf('token') > types.indexOf('references')) throw new Error('tokens should stream before references');
 
-    // sources only contains docs with content
     const srcTitles = last.sources.map(s => s.title);
     if (!srcTitles.includes('文档A')) throw new Error('sources missing 文档A');
     if (srcTitles.includes('文档B')) throw new Error('sources should not include 文档B (no content)');
@@ -168,10 +160,12 @@ async function runTests() {
       searchDocsMock: async () => [],
     });
 
-    const events = await collect(runRAGStream(USER, '找不到', HISTORY, false, BASE_CONFIG));
+    const events = (await collect(runRAGStream(USER, '找不到', HISTORY, false, BASE_CONFIG)))
+      .filter(e => e.type !== 'status');
 
-    if (events[0].type !== 'references') throw new Error(`first type=${events[0].type}`);
-    if (events[0].references.length !== 0) throw new Error('expected empty references');
+    const refEv = events.find(e => e.type === 'references');
+    if (!refEv) throw new Error('missing references event');
+    if (refEv.references.length !== 0) throw new Error('expected empty references');
 
     const tokenEvs = events.filter(e => e.type === 'token');
     if (tokenEvs.length === 0) throw new Error('no token event emitted');

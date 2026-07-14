@@ -191,10 +191,12 @@ async function askQuestion() {
   var streamResult = appendStreamingBubble();
   var bubbleEl = streamResult.bubbleEl;
   var msgEl = streamResult.msgEl;
-  var thinkBox = streamResult.thinkBox;
-  var thinkBody = streamResult.thinkBody;
-  var reasoningText = '';
+  var thinkStatus = streamResult.thinkStatus;
+  var thinkTime = streamResult.thinkTime;
   var pendingReferences = null;
+  var thinkStart = 0;
+  var thinkTimer = null;
+  var sawReasoning = false;
 
   try {
     const res = await authFetch('/api/conversations/' + currentConversationId + '/ask', {
@@ -242,22 +244,38 @@ async function askQuestion() {
         let payload;
         try { payload = JSON.parse(dataStr); } catch (e) { continue; }
 
-        if (eventType === 'references' && payload.references) {
+        if (eventType === 'status' && payload.text) {
+          // 即时进度反馈：正在搜索 / 正在阅读（让用户看到系统在动，不是卡住）
+          thinkStatus.style.display = 'inline-flex';
+          thinkStatus.querySelector('.think-text').textContent = payload.text;
+        } else if (eventType === 'references' && payload.references) {
           // 先缓存，等回答生成完再渲染（参考资料出现在答案之后，像飞书）
           pendingReferences = payload.references;
         } else if (eventType === 'reasoning' && payload.delta) {
-          // 深度思考过程：实时显示，让用户看到进度而不是干等
-          reasoningText += payload.delta;
-          thinkBox.style.display = 'block';
-          thinkBody.textContent = reasoningText;
-          scrollToBottom();
+          // 只显示"深度思考中 · 用时"，不暴露原始思考内容（含 prompt 规则/草稿，很丑）
+          if (!sawReasoning) {
+            sawReasoning = true;
+            thinkStart = Date.now();
+            thinkStatus.style.display = 'inline-flex';
+            thinkStatus.querySelector('.think-text').textContent = '深度思考中';
+            thinkTimer = setInterval(function () {
+              thinkTime.textContent = ' · ' + Math.round((Date.now() - thinkStart) / 1000) + 's';
+            }, 200);
+          }
         } else if (eventType === 'token' && payload.delta) {
-          // 首个正文 token 到达：思考结束，自动收起思考框
-          if (fullText === '' && reasoningText) {
-            thinkBox.classList.add('collapsed');
-            msgEl.querySelector('.think-label').textContent = '已深度思考';
-            msgEl.querySelector('.think-toggle').textContent = '展开';
-            var sp = msgEl.querySelector('.think-spinner'); if (sp) sp.remove();
+          // 首个正文 token：结束思考/搜索状态
+          if (fullText === '') {
+            if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
+            if (sawReasoning) {
+              const secs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+              thinkStatus.classList.add('done');
+              thinkStatus.querySelector('.think-text').textContent = '已深度思考';
+              thinkTime.textContent = ' · 用时 ' + secs + 's';
+              const sp = thinkStatus.querySelector('.think-spinner'); if (sp) sp.remove();
+            } else {
+              // 快模型无思考过程：直接隐藏搜索状态，展示答案
+              thinkStatus.style.display = 'none';
+            }
           }
           fullText += payload.delta;
           bubbleEl.classList.remove('streaming');
@@ -282,6 +300,7 @@ async function askQuestion() {
       scrollToBottom();
     }
   } finally {
+    if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
     isLoading = false;
     sendBtn.disabled = questionInput.value.trim().length === 0;
   }
@@ -293,22 +312,17 @@ function appendStreamingBubble() {
   msgEl.className = 'message';
   msgEl.innerHTML =
     '<div class="avatar">AI</div><div class="message-content">' +
-      '<div class="think-box" style="display:none;">' +
-        '<div class="think-head"><span class="think-spinner"></span><span class="think-label">正在深度思考…</span><span class="think-toggle">收起</span></div>' +
-        '<div class="think-body"></div>' +
-      '</div>' +
+      '<div class="think-status" style="display:none;"><span class="think-spinner"></span><span class="think-text">深度思考中</span><span class="think-time"></span></div>' +
       '<div class="message-bubble markdown-body streaming"><div class="loading-dots"><span></span><span></span><span></span></div></div>' +
     '</div>';
   chatContainer.appendChild(msgEl);
   scrollToBottom();
-  const thinkBox = msgEl.querySelector('.think-box');
-  const thinkBody = msgEl.querySelector('.think-body');
-  // 点击标题展开/收起思考过程
-  msgEl.querySelector('.think-head').addEventListener('click', function () {
-    const collapsed = thinkBox.classList.toggle('collapsed');
-    msgEl.querySelector('.think-toggle').textContent = collapsed ? '展开' : '收起';
-  });
-  return { bubbleEl: msgEl.querySelector('.message-bubble'), msgEl: msgEl, thinkBox: thinkBox, thinkBody: thinkBody };
+  return {
+    bubbleEl: msgEl.querySelector('.message-bubble'),
+    msgEl: msgEl,
+    thinkStatus: msgEl.querySelector('.think-status'),
+    thinkTime: msgEl.querySelector('.think-time'),
+  };
 }
 
 // 统一的参考资料区块构建（飞书紧凑编号列表）。流式与历史加载共用，样式一致。

@@ -98,10 +98,24 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
     if (titleKey && seenTitle.has(titleKey)) continue;  // 同名文档只保留一份
     seenToken.add(r.token);
     if (titleKey) seenTitle.add(titleKey);
-    merged.push({ ...r, index: merged.length + 1 });
+    merged.push(r);
   }
-  // 控制总数，避免一堆低相关文档（wiki 已优先靠前）
-  return merged.slice(0, pageSize);
+
+  // 相关性重排：标题命中的关键词越多越靠前（"澳洲 迁移" 里两个词都在标题 > 只命中一个）。
+  // 这样最相关的文档排前面，也正是喂给 AI 读全文的那几篇。
+  const kws = String(query || '').split(/\s+/).filter(Boolean);
+  const scoreOf = (t) => kws.reduce((s, k) => s + ((t && t.includes(k)) ? 1 : 0), 0);
+  merged.forEach(r => { r._score = scoreOf(r.title); });
+  merged.sort((a, b) => b._score - a._score);   // V8 稳定排序，同分保持原序（wiki 优先）
+
+  // 若存在"标题命中多个关键词"的强相关文档，则过滤掉几乎不相关的（命中数为 0）
+  const maxScore = merged.length ? merged[0]._score : 0;
+  const filtered = maxScore >= 2 ? merged.filter(r => r._score >= 1) : merged;
+
+  return filtered.slice(0, pageSize).map((r, i) => {
+    const { _score, ...rest } = r;
+    return { ...rest, index: i + 1 };
+  });
 }
 
 /** unix 秒(字符串/数字) → YYYY-MM-DD；无效返回 '' */

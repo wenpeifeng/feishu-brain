@@ -292,43 +292,27 @@ body {
   padding: 40px 20px;
 }
 
-/* 深度思考框（推理模型的思考过程，DeepSeek 风格）—— 填满内容列，不加额外偏移 */
-.think-box {
-  width: 100%;
-  margin: 0 0 8px 0;
-  border-left: 2px solid #d0d3d6;
-  background: #fafbfc;
-  border-radius: 0 8px 8px 0;
-  overflow: hidden;
-}
-.think-head {
-  display: flex;
+/* 深度思考状态（只显示"深度思考中 · 用时"，不暴露原始思考内容） */
+.think-status {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  margin-bottom: 8px;
   font-size: 13px;
   color: #646a73;
-  cursor: pointer;
-  user-select: none;
+  background: #f2f3f5;
+  border-radius: 14px;
 }
-.think-toggle { margin-left: auto; color: #8f959e; font-size: 12px; }
+.think-status.done { color: #8f959e; background: transparent; padding-left: 0; }
 .think-spinner {
   width: 12px; height: 12px; border-radius: 50%;
-  border: 2px solid #d0d3d6; border-top-color: #3370ff;
-  animation: think-spin 0.8s linear infinite;
+  border: 2px solid #d5d8dc; border-top-color: var(--primary);
+  animation: think-spin 0.7s linear infinite;
   flex-shrink: 0;
 }
 @keyframes think-spin { to { transform: rotate(360deg); } }
-.think-body {
-  padding: 0 12px 12px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: #8f959e;
-  white-space: pre-wrap;
-  max-height: 260px;
-  overflow-y: auto;
-}
-.think-box.collapsed .think-body { display: none; }
 
 .welcome h2 {
   font-size: 22px;
@@ -466,12 +450,26 @@ body {
 }
 
 .references {
-  margin: 4px auto 8px;
+  margin: 8px auto 8px;
   width: 100%;
   max-width: 848px;
   box-sizing: border-box;
   padding: 0 24px 0 68px;   /* 68 = 24 页边 + 32 头像 + 12 间隙，与 AI 正文左对齐 */
+  animation: fadeInUp 0.35s ease both;
 }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 参考资料逐条淡入，柔和不突兀 */
+.reference-item { animation: fadeInUp 0.3s ease both; }
+.reference-item:nth-child(1) { animation-delay: 0.03s; }
+.reference-item:nth-child(2) { animation-delay: 0.06s; }
+.reference-item:nth-child(3) { animation-delay: 0.09s; }
+.reference-item:nth-child(4) { animation-delay: 0.12s; }
+.reference-item:nth-child(5) { animation-delay: 0.15s; }
+.reference-item:nth-child(n+6) { animation-delay: 0.18s; }
 
 .references-title {
   font-size: 14px;

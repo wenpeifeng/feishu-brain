@@ -19,14 +19,7 @@
 
 const { searchDocs, fetchDoc, enrichReferences } = require('./feishu');
 const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
-const { resolveProvider } = require('./providers');
-
-/** 提取关键词后搜索并补全作者/日期。整句问题直接搜会 0 结果，故先提炼关键词。 */
-async function searchAndEnrich(userAccessToken, question, provider, pageSize) {
-  const keywords = await extractKeywords(question, provider);
-  const results = await searchDocs(userAccessToken, keywords, pageSize);
-  return enrichReferences(userAccessToken, results);
-}
+const { resolveProvider, resolveFastProvider } = require('./providers');
 
 /**
  * RAG 流式编排生成器。
@@ -80,26 +73,31 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   }
 
   // ── webSearch=false 分支：知识库问答 ──────────────────────────────────────
+  // 用状态事件给用户即时反馈（业界做法：不让用户对着空白等），并把慢步骤挪出首屏关键路径。
+  const fast = resolveFastProvider() || provider;   // 关键词用快模型，避免慢推理拖首屏
 
-  // Step 1: 关键词提取 → 搜索飞书文档 → 补全作者/日期
+  // Step 1: 搜索（立刻给"搜索中"反馈）
+  yield { type: 'status', text: '正在搜索飞书知识库…' };
   let results;
   try {
-    results = await searchAndEnrich(userAccessToken, question, provider, pageSize);
+    const keywords = await extractKeywords(question, fast);
+    results = await searchDocs(userAccessToken, keywords, pageSize);
   } catch (err) {
-    const msg = err.message || String(err);
     yield { type: 'references', references: [] };
-    yield { type: 'token', delta: '搜索飞书文档失败：' + msg };
+    yield { type: 'token', delta: '搜索飞书文档失败：' + (err.message || String(err)) };
     return;
   }
-
-  // Step 2: 搜索结果为空
   if (results.length === 0) {
     yield { type: 'references', references: [] };
     yield { type: 'token', delta: '未找到相关文档。' };
     return;
   }
 
-  // Step 3: 取前 topK 项，fetchDoc 拿正文
+  // 作者/日期富化：并行进行，不阻塞后续阅读与生成（参考资料在最后才展示）
+  const enrichP = enrichReferences(userAccessToken, results).catch(() => results);
+
+  // Step 2: 读取最相关的前 topK 篇正文（给"阅读中"反馈）
+  yield { type: 'status', text: '正在阅读相关文档…' };
   const topItems = results.slice(0, topK);
   const docs = await Promise.all(
     topItems.map(item =>
@@ -109,10 +107,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
     )
   );
 
-  // Step 4: 先 yield references（让前端立刻显示参考资料）
-  yield { type: 'references', references: results };
-
-  // Step 5: 流式生成回答
+  // Step 3: 流式生成回答（首个 reasoning/token 一到，前端状态即切换）
   try {
     for await (const chunk of askLLMStream(question, docs, history, provider)) {
       if (chunk.type === 'reasoning') yield { type: 'reasoning', delta: chunk.text };
@@ -127,11 +122,10 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
     }
   }
 
-  // Step 6: yield sources（仅含有内容的文档）
-  const sources = docs
-    .filter(d => d.content)
-    .map(d => ({ title: d.title, url: d.url }));
-  yield { type: 'sources', sources };
+  // Step 4: 参考资料（富化已并行完成）+ 来源
+  const enriched = await enrichP;
+  yield { type: 'references', references: enriched };
+  yield { type: 'sources', sources: docs.filter(d => d.content).map(d => ({ title: d.title, url: d.url })) };
 }
 
 module.exports = { runRAGStream };
