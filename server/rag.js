@@ -20,6 +20,7 @@
 const { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls } = require('./feishu');
 const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
 const { resolveProvider, resolveFastProvider } = require('./providers');
+const { searchKb } = require('./kb');
 
 /**
  * RAG 流式编排生成器。
@@ -81,27 +82,32 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   const cleanQ = question.replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Step 1: 搜索（立刻给"搜索中"反馈）
-  yield { type: 'status', text: urlItems.length ? '正在打开你发的文档…' : '正在搜索飞书知识库…' };
+  yield { type: 'status', text: urlItems.length ? '正在打开你发的文档…' : '正在搜索知识库…' };
+  const kwSource = cleanQ || (urlItems.length ? '' : question);
+  let keywords = '';
+  try { if (kwSource) keywords = await extractKeywords(kwSource, fast); } catch (_e) { keywords = kwSource; }
+
   let searchResults = [];
+  let searchErr = null;
   try {
-    // 有链接时用去掉链接后的文字提关键词；纯链接则不搜，直接用链接文档
-    const kwSource = cleanQ || (urlItems.length ? '' : question);
-    if (kwSource) {
-      const keywords = await extractKeywords(kwSource, fast);
-      searchResults = await searchDocs(userAccessToken, keywords, pageSize);
-    }
-  } catch (err) {
-    if (!urlItems.length) {
-      yield { type: 'references', references: [] };
-      yield { type: 'token', delta: '搜索飞书文档失败：' + (err.message || String(err)) };
-      return;
-    }
+    if (keywords) searchResults = await searchDocs(userAccessToken, keywords, pageSize);
+  } catch (err) { searchErr = err; }
+
+  // 本地知识库（用户上传的补充文档）一起检索
+  let kbResults = [];
+  try { if (keywords) kbResults = searchKb(user.openId, keywords); } catch (_e) { kbResults = []; }
+
+  // 飞书搜索失败且没有其它来源 → 报错
+  if (searchErr && !urlItems.length && !kbResults.length) {
+    yield { type: 'references', references: [] };
+    yield { type: 'token', delta: '搜索文档失败：' + (searchErr.message || String(searchErr)) };
+    return;
   }
 
-  // 合并：链接文档排最前（用户明确指定），再拼搜索结果，按 token 去重
+  // 合并：链接文档最前（用户明确指定）→ 本地知识库 → 飞书搜索，按 token 去重
   const seen = new Set();
   const results = [];
-  for (const r of [...urlItems, ...searchResults]) {
+  for (const r of [...urlItems, ...kbResults, ...searchResults]) {
     if (!r.token || seen.has(r.token)) continue;
     seen.add(r.token);
     results.push(r);
@@ -119,11 +125,15 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   yield { type: 'status', text: '正在阅读相关文档…' };
   const topItems = results.slice(0, Math.max(topK, urlItems.length));
   const docs = await Promise.all(
-    topItems.map(item =>
-      fetchDoc(userAccessToken, item)
+    topItems.map(item => {
+      // 本地知识库文档已带正文，无需再拉取
+      if (item.source === 'kb' || item.content) {
+        return Promise.resolve({ ...item, content: item.content || '' });
+      }
+      return fetchDoc(userAccessToken, item)
         .then(d => ({ ...item, title: d.title || item.title, content: d.content || '' }))
-        .catch(() => ({ ...item, content: '' }))
-    )
+        .catch(() => ({ ...item, content: '' }));
+    })
   );
 
   // Step 3: 流式生成回答（首个 reasoning/token 一到，前端状态即切换）

@@ -578,6 +578,89 @@ async function saveSettings(e) {
   }
 }
 
+// ─── 知识库（用户上传的补充文档，检索时与飞书文档一起命中）──────────────────
+function setupKb() {
+  const kbModal = document.getElementById('kbModal');
+  if (!kbModal) return;
+  const close = function () { kbModal.classList.remove('show'); };
+  document.getElementById('closeKb').addEventListener('click', close);
+  kbModal.querySelector('.modal-backdrop').addEventListener('click', close);
+  const fileInput = document.getElementById('kbFileInput');
+  document.getElementById('kbUploadBtn').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () { uploadKbFiles(fileInput.files); fileInput.value = ''; });
+  const pasteArea = document.getElementById('kbPasteArea');
+  document.getElementById('kbPasteBtn').addEventListener('click', function () {
+    pasteArea.style.display = pasteArea.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('kbPasteSave').addEventListener('click', savePastedDoc);
+}
+
+function openKb() {
+  document.getElementById('kbModal').classList.add('show');
+  loadKbList();
+}
+
+async function loadKbList() {
+  const listEl = document.getElementById('kbList');
+  listEl.innerHTML = '<div class="kb-empty">加载中…</div>';
+  try {
+    const res = await authFetch('/api/kb');
+    const data = await res.json();
+    renderKbList(data.docs || []);
+  } catch (e) { listEl.innerHTML = '<div class="kb-empty">加载失败</div>'; }
+}
+
+function renderKbList(docs) {
+  const listEl = document.getElementById('kbList');
+  if (!docs.length) { listEl.innerHTML = '<div class="kb-empty">还没有上传文档</div>'; return; }
+  listEl.innerHTML = '';
+  docs.forEach(function (d) {
+    const item = document.createElement('div');
+    item.className = 'kb-item';
+    item.innerHTML = '<div class="kb-item-info"><div class="kb-item-title">' + escapeHtml(d.title) +
+      '</div><div class="kb-item-meta">' + (d.uploadedAt || '').slice(0, 10) + ' · ' + (d.size || 0) + ' 字</div></div>' +
+      '<button class="kb-item-del" title="删除">×</button>';
+    item.querySelector('.kb-item-del').addEventListener('click', function () { deleteKbDoc(d.id); });
+    listEl.appendChild(item);
+  });
+}
+
+async function uploadKbFiles(files) {
+  if (!files || !files.length) return;
+  let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const text = await files[i].text();
+      if (!text.trim()) continue;
+      const res = await authFetch('/api/kb', { method: 'POST', body: JSON.stringify({ title: files[i].name, content: text }) });
+      if ((await res.json()).ok) ok++;
+    } catch (e) { /* skip */ }
+  }
+  showToast('已上传 ' + ok + ' 篇文档');
+  loadKbList();
+}
+
+async function savePastedDoc() {
+  const title = (document.getElementById('kbPasteTitle').value || '').trim() || '粘贴文档';
+  const content = (document.getElementById('kbPasteContent').value || '').trim();
+  if (!content) { showToast('内容为空'); return; }
+  try {
+    const res = await authFetch('/api/kb', { method: 'POST', body: JSON.stringify({ title, content }) });
+    if ((await res.json()).ok) {
+      showToast('已保存到知识库');
+      document.getElementById('kbPasteTitle').value = '';
+      document.getElementById('kbPasteContent').value = '';
+      document.getElementById('kbPasteArea').style.display = 'none';
+      loadKbList();
+    } else { showToast('保存失败'); }
+  } catch (e) { showToast('保存失败'); }
+}
+
+async function deleteKbDoc(id) {
+  if (!confirm('删除这篇文档？')) return;
+  try { await authFetch('/api/kb/' + encodeURIComponent(id), { method: 'DELETE' }); loadKbList(); } catch (e) { /* ignore */ }
+}
+
 // ─── Interactions ─────────────────────────────────────────────────────────────
 
 function toggleWebSearch() {
@@ -611,18 +694,16 @@ async function shareChat() {
 function setupEventListeners() {
   newChatBtn.addEventListener('click', createNewConversation);
   settingsBtn.addEventListener('click', openSettings);
-  // v1 暂无独立知识库管理页（上传/管理为 v2）；此按钮仅作「搜索覆盖全部有权限文档」的状态提示
-  knowledgeBaseBtn.addEventListener('click', function () {
-    alert('搜索已覆盖你飞书内有权限的全部文档。\n（知识库上传 / 管理为后续版本功能）');
-  });
+  knowledgeBaseBtn.addEventListener('click', openKb);   // 全部知识库 → 知识库管理
   closeSettings.addEventListener('click', closeSettingsModal);
   settingsModal.querySelector('.modal-backdrop').addEventListener('click', closeSettingsModal);
   settingsForm.addEventListener('submit', saveSettings);
   sendBtn.addEventListener('click', askQuestion);
   webSearchBtn.addEventListener('click', toggleWebSearch);
   shareBtn.addEventListener('click', shareChat);
-  feedbackBtn.addEventListener('click', function() { showToast('反馈功能开发中'); });
-  addFileBtn.addEventListener('click', function() { showToast('附件功能开发中'); });
+  feedbackBtn.addEventListener('click', function() { showToast('如需反馈，请联系管理员'); });
+  addFileBtn.addEventListener('click', openKb);          // 输入框"+" → 上传文档到知识库
+  setupKb();
   historySearchInput.addEventListener('input', function(e) {
     historySearch = e.target.value.trim();
     renderHistory();

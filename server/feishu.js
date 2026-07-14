@@ -149,7 +149,7 @@ async function enrichReferences(userAccessToken, results) {
   const dateByToken = new Map();
   try {
     const request_docs = results
-      .filter(r => r.token && r.type)
+      .filter(r => r.token && r.type && r.source !== 'kb')   // 本地知识库不查飞书元数据
       .map(r => ({ doc_token: r.token, doc_type: r.type }));
     if (request_docs.length) {
       const res = await fetch(`${BASE}/drive/v1/metas/batch_query`, {

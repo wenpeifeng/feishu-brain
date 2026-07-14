@@ -16,6 +16,7 @@ const {
   getConfig, updateConfig,
 } = require('./store');
 const { publicProviders } = require('./providers');
+const { addDoc, listDocs, deleteDoc } = require('./kb');
 const { runRAGStream } = require('./rag');
 
 // ── 鉴权中间件 ─────────────────────────────────────────────────────────────────
@@ -202,6 +203,42 @@ async function handleRequest(req, res) {
     } catch (err) {
       json(res, { ok: false, error: err.message }, 500);
     }
+    return;
+  }
+
+  // ── 知识库：GET /api/kb（列出本人上传的文档）───────────────────────────────
+  if (url.pathname === '/api/kb' && req.method === 'GET') {
+    const ctx = await requireAuth(req);
+    if (!ctx) { json(res, { ok: false, error: '未登录或登录已过期' }, 401); return; }
+    json(res, { ok: true, docs: listDocs(ctx.openId) });
+    return;
+  }
+
+  // ── 知识库：POST /api/kb（上传一篇文档，body: {title, content}）──────────────
+  if (url.pathname === '/api/kb' && req.method === 'POST') {
+    const ctx = await requireAuth(req);
+    if (!ctx) { json(res, { ok: false, error: '未登录或登录已过期' }, 401); return; }
+    try {
+      const body = await parseBody(req);
+      if (!body.content || !String(body.content).trim()) {
+        json(res, { ok: false, error: '文档内容为空' }, 400);
+        return;
+      }
+      const doc = addDoc(ctx.openId, { title: body.title, content: String(body.content) });
+      json(res, { ok: true, doc });
+    } catch (err) {
+      json(res, { ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // ── 知识库：DELETE /api/kb/:id ─────────────────────────────────────────────
+  const kbMatch = url.pathname.match(/^\/api\/kb\/([^/]+)$/);
+  if (kbMatch && req.method === 'DELETE') {
+    const ctx = await requireAuth(req);
+    if (!ctx) { json(res, { ok: false, error: '未登录或登录已过期' }, 401); return; }
+    const ok = deleteDoc(ctx.openId, decodeURIComponent(kbMatch[1]));
+    json(res, { ok });
     return;
   }
 

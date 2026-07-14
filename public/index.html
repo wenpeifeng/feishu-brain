@@ -135,6 +135,30 @@
     </div>
   </div>
 
+  <div class="modal" id="kbModal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>我的知识库</h2>
+        <button class="modal-close" id="closeKb">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="kb-intro">上传补充文档（.txt / .md / .csv / .json 等文本），提问时会连同飞书文档一起检索，命中即作为参考资料。仅你可见。</div>
+        <div class="kb-actions">
+          <button type="button" class="btn-primary" id="kbUploadBtn">上传文档</button>
+          <button type="button" class="btn-secondary" id="kbPasteBtn">粘贴文本</button>
+          <input type="file" id="kbFileInput" accept=".txt,.md,.markdown,.csv,.json,.log,.text" multiple style="display:none;">
+        </div>
+        <div id="kbPasteArea" style="display:none;">
+          <input type="text" id="kbPasteTitle" placeholder="文档标题" class="kb-input">
+          <textarea id="kbPasteContent" placeholder="粘贴文档内容…" class="kb-textarea"></textarea>
+          <div class="form-actions"><button type="button" class="btn-primary" id="kbPasteSave">保存</button></div>
+        </div>
+        <div id="kbList" class="kb-list"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>
