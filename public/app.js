@@ -307,7 +307,7 @@ function appendSourcesAfterBubble(msgEl, sources) {
   list.className = 'sources-list';
   sources.forEach(function(src) {
     const li = document.createElement('li');
-    li.innerHTML = '<a href="' + (src.url || '#') + '" target="_blank">' + escapeHtml(src.title || '') + '</a>';
+    li.innerHTML = '<a href="' + safeUrl(src.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(src.title || '') + '</a>';
     list.appendChild(li);
   });
   section.appendChild(list);
@@ -443,7 +443,7 @@ function appendSources(sources) {
   list.className = 'sources-list';
   sources.forEach(function(src) {
     const li = document.createElement('li');
-    li.innerHTML = '<a href="' + (src.url || '#') + '" target="_blank">' + escapeHtml(src.title || '') + '</a>';
+    li.innerHTML = '<a href="' + safeUrl(src.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(src.title || '') + '</a>';
     list.appendChild(li);
   });
   section.appendChild(list);
@@ -720,7 +720,7 @@ function inlineMarkdown(text) {
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) { return '<a href="' + safeUrl(url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a>'; });
   return html;
 }
 
@@ -732,6 +732,10 @@ function escapeHtml(text) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function safeUrl(url) {
+  return /^https?:\/\//i.test(url || '') ? url : '#';
 }
 
 function formatDate(isoString) {
@@ -748,9 +752,10 @@ function formatDate(isoString) {
   const params = new URLSearchParams(location.search);
   if (params.has('token')) {
     localStorage.setItem('kb_token', params.get('token'));
-    // clean URL, respect state redirect
-    const state = params.get('state') || '/';
-    history.replaceState(null, '', state === '/' ? '/' : state);
+    // clean URL, respect state redirect (only allow site-internal relative paths)
+    let state = params.get('state') || '/';
+    if (!/^\/[^/]/.test(state) && state !== '/') state = '/';
+    history.replaceState(null, '', state);
   }
 
   // 2. Check localStorage for token
