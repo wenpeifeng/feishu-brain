@@ -108,9 +108,15 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
   merged.forEach(r => { r._score = scoreOf(r.title); });
   merged.sort((a, b) => b._score - a._score);   // V8 稳定排序，同分保持原序（wiki 优先）
 
-  // 若存在"标题命中多个关键词"的强相关文档，则过滤掉几乎不相关的（命中数为 0）
-  const maxScore = merged.length ? merged[0]._score : 0;
-  const filtered = maxScore >= 2 ? merged.filter(r => r._score >= 1) : merged;
+  // 相关性阈值过滤：只保留"足够相关"的，宁缺毋滥（用户不想看一堆不相干文档）
+  //   - 有强相关(标题命中≥2关键词)时：只留命中≥2的
+  //   - 只有单命中时：留命中≥1的
+  //   - 标题都没命中(命中在正文)：全留（避免全空）
+  const maxScore = merged.reduce((m, r) => Math.max(m, r._score), 0);
+  let filtered;
+  if (maxScore >= 2) filtered = merged.filter(r => r._score >= 2);
+  else if (maxScore === 1) filtered = merged.filter(r => r._score >= 1);
+  else filtered = merged;
 
   return filtered.slice(0, pageSize).map((r, i) => {
     const { _score, ...rest } = r;
@@ -234,4 +240,21 @@ async function fetchDocxContent(userAccessToken, docxToken) {
   return j.data?.content || '';
 }
 
-module.exports = { searchDocs, fetchDoc, enrichReferences };
+/** 从文本里解析飞书文档链接 → [{type,token,url,...}]，用于"总结这篇文档"场景 */
+const URL_TYPE = { docx: 'docx', docs: 'doc', wiki: 'wiki', sheets: 'sheet', base: 'bitable', file: 'file', slides: 'slides', mindnotes: 'mindnote', wik: 'wiki' };
+function parseFeishuDocUrls(text) {
+  const re = /https?:\/\/[\w.-]*feishu\.(?:cn|com)\/(docx|docs|wiki|sheets|base|file|slides|mindnotes)\/([A-Za-z0-9]+)/gi;
+  const out = [];
+  const seen = new Set();
+  let m;
+  while ((m = re.exec(text || ''))) {
+    const type = URL_TYPE[m[1].toLowerCase()] || 'docx';
+    const token = m[2];
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push({ index: out.length + 1, title: '', type, token, url: m[0], owner: '', editTime: '', source: 'url' });
+  }
+  return out;
+}
+
+module.exports = { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls };

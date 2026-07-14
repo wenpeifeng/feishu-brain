@@ -17,7 +17,7 @@
  * 不 log token 或 apiKey。
  */
 
-const { searchDocs, fetchDoc, enrichReferences } = require('./feishu');
+const { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls } = require('./feishu');
 const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
 const { resolveProvider, resolveFastProvider } = require('./providers');
 
@@ -76,16 +76,35 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   // 用状态事件给用户即时反馈（业界做法：不让用户对着空白等），并把慢步骤挪出首屏关键路径。
   const fast = resolveFastProvider() || provider;   // 关键词用快模型，避免慢推理拖首屏
 
+  // Step 0: 若消息里粘了飞书文档链接，直接定位这几篇（"帮我总结这篇文档"场景）
+  const urlItems = parseFeishuDocUrls(question);
+  const cleanQ = question.replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
+
   // Step 1: 搜索（立刻给"搜索中"反馈）
-  yield { type: 'status', text: '正在搜索飞书知识库…' };
-  let results;
+  yield { type: 'status', text: urlItems.length ? '正在打开你发的文档…' : '正在搜索飞书知识库…' };
+  let searchResults = [];
   try {
-    const keywords = await extractKeywords(question, fast);
-    results = await searchDocs(userAccessToken, keywords, pageSize);
+    // 有链接时用去掉链接后的文字提关键词；纯链接则不搜，直接用链接文档
+    const kwSource = cleanQ || (urlItems.length ? '' : question);
+    if (kwSource) {
+      const keywords = await extractKeywords(kwSource, fast);
+      searchResults = await searchDocs(userAccessToken, keywords, pageSize);
+    }
   } catch (err) {
-    yield { type: 'references', references: [] };
-    yield { type: 'token', delta: '搜索飞书文档失败：' + (err.message || String(err)) };
-    return;
+    if (!urlItems.length) {
+      yield { type: 'references', references: [] };
+      yield { type: 'token', delta: '搜索飞书文档失败：' + (err.message || String(err)) };
+      return;
+    }
+  }
+
+  // 合并：链接文档排最前（用户明确指定），再拼搜索结果，按 token 去重
+  const seen = new Set();
+  const results = [];
+  for (const r of [...urlItems, ...searchResults]) {
+    if (!r.token || seen.has(r.token)) continue;
+    seen.add(r.token);
+    results.push(r);
   }
   if (results.length === 0) {
     yield { type: 'references', references: [] };
@@ -96,9 +115,9 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   // 作者/日期富化：并行进行，不阻塞后续阅读与生成（参考资料在最后才展示）
   const enrichP = enrichReferences(userAccessToken, results).catch(() => results);
 
-  // Step 2: 读取最相关的前 topK 篇正文（给"阅读中"反馈）
+  // Step 2: 读取正文（给"阅读中"反馈）；至少读完用户粘的链接文档 + topK 篇
   yield { type: 'status', text: '正在阅读相关文档…' };
-  const topItems = results.slice(0, topK);
+  const topItems = results.slice(0, Math.max(topK, urlItems.length));
   const docs = await Promise.all(
     topItems.map(item =>
       fetchDoc(userAccessToken, item)
@@ -123,7 +142,13 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   }
 
   // Step 4: 参考资料（富化已并行完成）+ 来源
-  const enriched = await enrichP;
+  // 链接文档的标题在 fetchDoc 后才有，回填到参考资料里
+  // docx 正文首行通常就是标题，用它兜底链接文档的标题
+  const titleByToken = new Map(docs.map(d => [d.token, d.title || (d.content || '').split('\n')[0].trim().slice(0, 60)]));
+  const enriched = (await enrichP).map(r => ({
+    ...r,
+    title: r.title || titleByToken.get(r.token) || '飞书文档',
+  }));
   yield { type: 'references', references: enriched };
   yield { type: 'sources', sources: docs.filter(d => d.content).map(d => ({ title: d.title, url: d.url })) };
 }

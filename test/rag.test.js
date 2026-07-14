@@ -65,6 +65,7 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
         searchDocs: searchDocsMock || (async () => FAKE_RESULTS),
         fetchDoc:   fetchDocMock   || (async (token, item) => item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B),
         enrichReferences: async (token, results) => results, // pass-through
+        parseFeishuDocUrls: () => [], // 无粘贴链接
       },
     };
 
