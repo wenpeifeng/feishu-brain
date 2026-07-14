@@ -9,7 +9,7 @@
  */
 
 const { buildAuthorizeUrl, signState, verifyState, exchangeCode, refreshUserToken } = require('./auth');
-const { createSession, getSession, updateTokens, removeSession } = require('./session');
+const { createSession, getSession, updateTokens, setLlmConfig, removeSession } = require('./session');
 const {
   createConversation, getConversationsFor, getConversationOwned,
   deleteConversationOwned, addMessage, updateConversationTitleOwned,
@@ -78,19 +78,30 @@ function json(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-/** 脱敏 config，绝不含 apiKey 明文 */
-function sanitizedConfig() {
-  const cfg = getConfig();
+/** 该用户的脱敏配置：LLM 来自其会话（每人独立），topK/pageSize 用全局默认。绝不回传明文 apiKey */
+function sanitizedConfig(ctx) {
+  const llm = (ctx && ctx.llm) || {};
+  const g = getConfig();
   return {
-    providerId: cfg.providerId || cfg.llmProvider || '',
-    topK: cfg.topK,
-    pageSize: cfg.pageSize,
-    custom: cfg.custom ? {
-      baseUrl: cfg.custom.baseUrl || '',
-      model: cfg.custom.model || '',
-      // apiKey 用 *** 占位
-      apiKey: cfg.custom.apiKey ? '***' : '',
-    } : undefined,
+    providerId: llm.providerId || 'qwen',
+    hasKey: !!llm.apiKey,   // 前端据此显示"已设置/未设置 API Key"
+    custom: { baseUrl: llm.baseUrl || '', model: llm.model || '' },
+    topK: g.topK,
+    pageSize: g.pageSize,
+  };
+}
+
+/** 组装该用户实际用于问答的完整 config：会话里的 LLM + 全局 topK/pageSize */
+function userRagConfig(ctx) {
+  const llm = (ctx && ctx.llm) || {};
+  const g = getConfig();
+  return {
+    providerId: llm.providerId || 'qwen',
+    apiKey: llm.apiKey || '',
+    baseUrl: llm.baseUrl || '',
+    model: llm.model || '',
+    topK: g.topK,
+    pageSize: g.pageSize,
   };
 }
 
@@ -160,28 +171,34 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // ── 5. GET /api/config ─────────────────────────────────────────────────────
+  // ── 5. GET /api/config（需登录，返回该用户自己的配置）───────────────────────
   if (url.pathname === '/api/config' && req.method === 'GET') {
-    json(res, { ok: true, providers: publicProviders(), config: sanitizedConfig() });
+    const ctx = await requireAuth(req);
+    if (!ctx) { json(res, { ok: false, error: '未登录或登录已过期' }, 401); return; }
+    json(res, { ok: true, providers: publicProviders(), config: sanitizedConfig(ctx) });
     return;
   }
 
-  // ── 6. POST /api/config ────────────────────────────────────────────────────
+  // ── 6. POST /api/config（保存该用户自己的 LLM 厂商+apiKey 到会话）──────────────
   if (url.pathname === '/api/config' && req.method === 'POST') {
     const ctx = await requireAuth(req);
-    if (!ctx) {
-      json(res, { ok: false, error: '未登录或登录已过期' }, 401);
-      return;
-    }
+    if (!ctx) { json(res, { ok: false, error: '未登录或登录已过期' }, 401); return; }
     try {
       const body = await parseBody(req);
-      const allowed = {};
-      if (body.providerId !== undefined) allowed.providerId = body.providerId;
-      if (body.custom !== undefined) allowed.custom = body.custom;
-      if (body.topK !== undefined) allowed.topK = body.topK;
-      if (body.pageSize !== undefined) allowed.pageSize = body.pageSize;
-      updateConfig(allowed);
-      json(res, { ok: true, providers: publicProviders(), config: sanitizedConfig() });
+      // apiKey 为空字符串时保留原 key（前端不回传明文，避免覆盖成空）
+      const prev = ctx.llm || {};
+      setLlmConfig(ctx.token, {
+        providerId: body.providerId || prev.providerId || 'qwen',
+        apiKey: (body.apiKey !== undefined && body.apiKey !== '') ? body.apiKey : (prev.apiKey || ''),
+        baseUrl: body.baseUrl !== undefined ? body.baseUrl : (prev.baseUrl || ''),
+        model: body.model !== undefined ? body.model : (prev.model || ''),
+      });
+      // topK/pageSize 仍是全局默认，可选更新
+      const g = {};
+      if (body.topK !== undefined) g.topK = body.topK;
+      if (body.pageSize !== undefined) g.pageSize = body.pageSize;
+      if (Object.keys(g).length) updateConfig(g);
+      json(res, { ok: true, providers: publicProviders(), config: sanitizedConfig(ctx) });
     } catch (err) {
       json(res, { ok: false, error: err.message }, 500);
     }
@@ -318,7 +335,7 @@ async function handleRequest(req, res) {
     let sources = [];
 
     try {
-      for await (const ev of runRAGStream(ctx, question, history, !!body.webSearch, getConfig())) {
+      for await (const ev of runRAGStream(ctx, question, history, !!body.webSearch, userRagConfig(ctx))) {
         res.write('event: ' + ev.type + '\ndata: ' + JSON.stringify(ev) + '\n\n');
         if (ev.type === 'token') answer += ev.delta || '';
         if (ev.type === 'references') references = ev.references || [];

@@ -502,31 +502,37 @@ function renderProviderDropdown(providers, cfg) {
   providers.forEach(function(p) {
     const opt = document.createElement('option');
     opt.value = p.id;
-    opt.textContent = p.name + (p.model ? ' (' + p.model + ')' : '');
+    // 名称 · 速度标注（响应快 / 深度思考·慢）
+    opt.textContent = p.name + (p.hint ? ' · ' + p.hint : '');
     providerSelect.appendChild(opt);
   });
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = '自定义（手填 Base URL / 模型）';
+  providerSelect.appendChild(customOpt);
 
-  providerSelect.value = cfg.providerId || (providers[0] && providers[0].id) || '';
+  providerSelect.value = cfg.providerId || 'qwen';
+  if (customFields) customFields.style.display = providerSelect.value === 'custom' ? 'block' : 'none';
 
-  // Show/hide custom fields
-  const showCustom = providerSelect.value === 'custom';
-  if (customFields) customFields.style.display = showCustom ? 'block' : 'none';
+  const customBaseUrl = document.getElementById('customBaseUrl');
+  const customModel = document.getElementById('customModel');
+  if (customBaseUrl) customBaseUrl.value = (cfg.custom && cfg.custom.baseUrl) || '';
+  if (customModel) customModel.value = (cfg.custom && cfg.custom.model) || '';
 
-  // Fill custom fields if custom
-  if (cfg.custom) {
-    const customBaseUrl = document.getElementById('customBaseUrl');
-    const customModel = document.getElementById('customModel');
-    if (customBaseUrl) customBaseUrl.value = cfg.custom.baseUrl || '';
-    if (customModel) customModel.value = cfg.custom.model || '';
+  // API Key 状态 + 清空输入框（不回显明文）
+  const apiKeyInput = document.getElementById('apiKeyInput');
+  if (apiKeyInput) apiKeyInput.value = '';
+  const keyStatus = document.getElementById('keyStatus');
+  if (keyStatus) {
+    keyStatus.textContent = cfg.hasKey ? '· 已设置（留空不改）' : '· 未设置，请填写';
+    keyStatus.className = 'key-status ' + (cfg.hasKey ? 'ok' : 'warn');
   }
 
-  // Fill topK and pageSize
   const topKInput = document.getElementById('topKInput');
   const pageSizeInput = document.getElementById('pageSizeInput');
   if (topKInput) topKInput.value = cfg.topK || 3;
-  if (pageSizeInput) pageSizeInput.value = cfg.pageSize || 9;
+  if (pageSizeInput) pageSizeInput.value = cfg.pageSize || 10;
 
-  // Wire up provider change
   providerSelect.onchange = function() {
     if (customFields) customFields.style.display = providerSelect.value === 'custom' ? 'block' : 'none';
   };
@@ -539,20 +545,18 @@ function closeSettingsModal() {
 async function saveSettings(e) {
   e.preventDefault();
   const providerSelect = document.getElementById('providerSelect');
-  const providerId = providerSelect ? providerSelect.value : '';
+  const providerId = providerSelect ? providerSelect.value : 'qwen';
   const newConfig = { providerId: providerId };
+
+  // 用户自己的 API Key（留空表示不修改）
+  const apiKeyInput = document.getElementById('apiKeyInput');
+  if (apiKeyInput && apiKeyInput.value) newConfig.apiKey = apiKeyInput.value;
 
   if (providerId === 'custom') {
     const customBaseUrl = document.getElementById('customBaseUrl');
     const customModel = document.getElementById('customModel');
-    const customApiKey = document.getElementById('customApiKey');
-    newConfig.custom = {
-      baseUrl: customBaseUrl ? customBaseUrl.value : '',
-      model: customModel ? customModel.value : '',
-    };
-    if (customApiKey && customApiKey.value) {
-      newConfig.custom.apiKey = customApiKey.value;
-    }
+    newConfig.baseUrl = customBaseUrl ? customBaseUrl.value : '';
+    newConfig.model = customModel ? customModel.value : '';
   }
 
   const topKInput = document.getElementById('topKInput');

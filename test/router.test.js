@@ -153,9 +153,13 @@ async function run() {
     console.log('  ✓ /api/auth/me 返回用户信息，不含敏感字段');
   }
 
-  // ─── 测试 3：GET /api/config 不含 apiKey 明文 ────────────────────────────────
+  // ─── 测试 3：GET /api/config（需登录）不含 apiKey 明文 ────────────────────────
   {
-    const req = mockReq({ method: 'GET', url: '/api/config' });
+    const token = createSession({
+      openId: 'ou_cfg', name: 'C', userAccessToken: 'sk-secret-token',
+      refreshToken: 'r', expireAt: Date.now() + 3600000,
+    });
+    const req = mockReq({ method: 'GET', url: '/api/config', headers: { authorization: `Bearer ${token}` } });
     const res = mockRes();
     await dispatch(req, res);
 
@@ -164,15 +168,10 @@ async function run() {
     // 不允许出现 sk- 开头的密钥
     const skMatch = body.match(/sk-[A-Za-z0-9]+/);
     assert.ok(!skMatch, `config 响应不应含 sk-* 密钥，实际: ${body}`);
-    // 不应有 apiKey 明文字段（若有只能是 *** 或空）
     const data = res.json;
-    if (data.config && data.config.custom && data.config.custom.apiKey) {
-      assert.ok(
-        data.config.custom.apiKey === '***' || data.config.custom.apiKey === '',
-        'custom.apiKey 只能是 *** 或空'
-      );
-    }
-    console.log('  ✓ GET /api/config 不含 apiKey 明文');
+    assert.ok(!('apiKey' in (data.config || {})), 'config 不应回传 apiKey 明文');
+    removeSession(token);
+    console.log('  ✓ GET /api/config 需登录且不含 apiKey 明文');
   }
 
   // ─── 测试 4：SSE ask 端点流式输出 references / token / done ─────────────────

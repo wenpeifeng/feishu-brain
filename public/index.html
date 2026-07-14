@@ -111,15 +111,16 @@
               <label>模型名称</label>
               <input type="text" id="customModel" placeholder="gpt-4o-mini">
             </div>
-            <div class="form-group">
-              <label>API Key</label>
-              <input type="password" id="customApiKey" placeholder="sk-...">
-            </div>
+          </div>
+          <div class="form-group">
+            <label>API Key <span id="keyStatus" class="key-status"></span></label>
+            <input type="password" id="apiKeyInput" placeholder="填写你自己的 API Key（sk-...）">
+            <div class="form-hint">你的 Key 仅保存在本次登录会话，退出/过期后需重新填写；不会与他人共享。</div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>搜索数量</label>
-              <input type="number" id="pageSizeInput" min="1" max="20" value="9">
+              <input type="number" id="pageSizeInput" min="1" max="20" value="10">
             </div>
             <div class="form-group">
               <label>参与总结文档数</label>

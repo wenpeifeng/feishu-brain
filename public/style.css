@@ -957,3 +957,9 @@ body {
   position: relative;
 }
 
+
+/* 设置里的 API Key 状态与提示 */
+.key-status { font-size: 12px; font-weight: normal; }
+.key-status.ok { color: #34c724; }
+.key-status.warn { color: #ff8800; }
+.form-hint { font-size: 12px; color: #8f959e; margin-top: 4px; line-height: 1.5; }

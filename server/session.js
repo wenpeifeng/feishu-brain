@@ -77,6 +77,24 @@ function updateTokens(token, { userAccessToken, refreshToken, expireAt }) {
 }
 
 /**
+ * 保存该用户自己的 LLM 配置（厂商 + apiKey）到会话里。随登录态存在，登出/过期即失效。
+ * @param {string} token
+ * @param {{ providerId, apiKey, baseUrl?, model? }} llm
+ */
+function setLlmConfig(token, llm) {
+  const ctx = sessions.get(token);
+  if (!ctx) return null;
+  ctx.llm = {
+    providerId: llm.providerId || 'qwen',
+    apiKey: llm.apiKey || '',
+    baseUrl: llm.baseUrl || '',
+    model: llm.model || '',
+  };
+  saveToDisk();
+  return ctx.llm;
+}
+
+/**
  * Remove a session.
  * @param {string} token
  */
@@ -85,4 +103,4 @@ function removeSession(token) {
   saveToDisk();
 }
 
-module.exports = { createSession, getSession, updateTokens, removeSession };
+module.exports = { createSession, getSession, updateTokens, setLlmConfig, removeSession };
