@@ -55,7 +55,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+      // 禁用缓存，避免改了 css/js 浏览器仍用旧文件
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    });
     res.end(data);
   });
 });

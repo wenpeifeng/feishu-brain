@@ -417,7 +417,7 @@ function appendUserMessage(content, scroll) {
   msg.className = 'message user';
   msg.innerHTML = '<div class="avatar">我</div><div class="message-content"><div class="message-bubble">' + escapeHtml(content) + '</div></div>';
   chatContainer.appendChild(msg);
-  if (scroll) scrollToBottom();
+  if (scroll) forceScrollToBottom();  // 发新问题时总是滚到底并重置粘底
 }
 
 function appendAssistantMessage(content, references, sources, mock, scroll) {
@@ -440,8 +440,22 @@ function appendAssistantMessage(content, references, sources, mock, scroll) {
   if (scroll) scrollToBottom();
 }
 
+// 仅当用户"贴着底部"时才自动滚动；用户往上滚看内容时不再强制拉回
+let stickToBottom = true;
+function isNearBottom() {
+  return chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 120;
+}
 function scrollToBottom() {
+  if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+function forceScrollToBottom() {
+  stickToBottom = true;
   chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+function initScrollTracking() {
+  chatContainer.addEventListener('scroll', function () {
+    stickToBottom = isNearBottom();
+  }, { passive: true });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
