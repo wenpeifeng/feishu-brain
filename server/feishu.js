@@ -29,32 +29,74 @@ function buildUrl(type, token) {
  * @param {number} pageSize
  * @returns {Promise<Array<{index,title,type,token,url,owner,editTime}>>}
  */
-async function searchDocs(userAccessToken, query, pageSize = 9) {
-  const url = `${BASE}/suite/docs-api/search/object`;
-  const res = await fetch(url, {
+/** wiki nodes/search 的 obj_type(数字) → 我们的 type 字符串 */
+const OBJ_TYPE = { 1: 'doc', 2: 'sheet', 3: 'bitable', 4: 'mindnote', 5: 'file', 7: 'wiki', 8: 'docx', 11: 'slides' };
+
+/** 搜索云盘文档（docs-api/search/object，不含 wiki） */
+async function searchDrive(userAccessToken, query, pageSize) {
+  const res = await fetch(`${BASE}/suite/docs-api/search/object`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${userAccessToken}`,
-      'Content-Type': 'application/json; charset=utf-8',
-    },
+    headers: { 'Authorization': `Bearer ${userAccessToken}`, 'Content-Type': 'application/json; charset=utf-8' },
     body: JSON.stringify({ search_key: query, count: pageSize, offset: 0 }),
   });
-
   const j = await res.json();
-  if (j.code !== 0) {
-    throw new Error(`feishu search error: code=${j.code} msg=${j.msg}`);
-  }
-
-  const entities = j.data?.docs_entities || [];
-  return entities.map((item, i) => ({
-    index:    i + 1,
-    title:    item.title,
-    type:     item.docs_type,
-    token:    item.docs_token,
-    url:      buildUrl(item.docs_type, item.docs_token),
-    owner:    item.owner_id,
+  if (j.code !== 0) throw new Error(`drive search error: code=${j.code} msg=${j.msg}`);
+  return (j.data?.docs_entities || []).map(item => ({
+    title: item.title,
+    type:  item.docs_type,
+    token: item.docs_token,
+    url:   buildUrl(item.docs_type, item.docs_token),
+    owner: item.owner_id || '',
     editTime: '',
+    source: 'drive',
   }));
+}
+
+/** 搜索知识库 wiki 节点（wiki/v2/nodes/search，覆盖所有有权限的知识空间） */
+async function searchWiki(userAccessToken, query, pageSize) {
+  const size = Math.min(pageSize, 50);
+  const res = await fetch(`${BASE}/wiki/v2/nodes/search?page_size=${size}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${userAccessToken}`, 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ query }),
+  });
+  const j = await res.json();
+  if (j.code !== 0) throw new Error(`wiki search error: code=${j.code} msg=${j.msg}`);
+  return (j.data?.items || []).map(item => ({
+    title: item.title,
+    type:  OBJ_TYPE[item.obj_type] || 'docx',  // 用于内容读取（8→docx）
+    token: item.obj_token,                       // 内容 token
+    url:   item.url || buildUrl('wiki', item.node_id),
+    owner: '',                                    // wiki 搜索不返回 owner，enrich 时从 metadata 补
+    editTime: '',
+    source: 'wiki',
+  }));
+}
+
+/**
+ * 搜索飞书全部有权限文档：**并行**云盘 + 知识库 wiki，合并去重。
+ * 任一路失败不影响另一路（wiki scope 未开时仍能返回云盘结果）。
+ */
+async function searchDocs(userAccessToken, query, pageSize = 9) {
+  const [driveR, wikiR] = await Promise.allSettled([
+    searchDrive(userAccessToken, query, pageSize),
+    searchWiki(userAccessToken, query, pageSize),
+  ]);
+  const drive = driveR.status === 'fulfilled' ? driveR.value : [];
+  const wiki  = wikiR.status  === 'fulfilled' ? wikiR.value  : [];
+  // 两路都失败才抛错（否则至少返回能拿到的那部分）
+  if (driveR.status === 'rejected' && wikiR.status === 'rejected') {
+    throw new Error(driveR.reason?.message || wikiR.reason?.message || 'feishu search failed');
+  }
+  // wiki 优先（工作文档多在知识库），再拼云盘，按 token 去重
+  const seen = new Set();
+  const merged = [];
+  for (const r of [...wiki, ...drive]) {
+    if (!r.token || seen.has(r.token)) continue;
+    seen.add(r.token);
+    merged.push({ ...r, index: merged.length + 1 });
+  }
+  return merged;
 }
 
 /** unix 秒(字符串/数字) → YYYY-MM-DD；无效返回 '' */
