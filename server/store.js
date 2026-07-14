@@ -77,6 +77,7 @@ function saveConversations(conversations) {
  * 创建对话，含 ownerOpenId 字段
  */
 function createConversation(ownerOpenId, title = '新对话') {
+  if (!ownerOpenId) throw new Error('ownerOpenId required');
   const conversations = getConversations();
   const conversation = {
     id: `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -124,6 +125,7 @@ function deleteConversationOwned(id, ownerOpenId) {
  * 追加消息前校验 owner；不匹配返回 null 且不写入
  */
 function addMessage(conversationId, ownerOpenId, message) {
+  if (!ownerOpenId) return null;
   const conversations = getConversations();
   const conversation = conversations.find(c => c.id === conversationId);
   if (!conversation) return null;
