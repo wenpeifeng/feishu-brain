@@ -17,9 +17,16 @@
  * 不 log token 或 apiKey。
  */
 
-const { searchDocs, fetchDoc } = require('./feishu');
-const { askLLMStream, askLLMGeneral } = require('./llm');
+const { searchDocs, fetchDoc, enrichReferences } = require('./feishu');
+const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
 const { resolveProvider } = require('./providers');
+
+/** 提取关键词后搜索并补全作者/日期。整句问题直接搜会 0 结果，故先提炼关键词。 */
+async function searchAndEnrich(userAccessToken, question, provider, pageSize) {
+  const keywords = await extractKeywords(question, provider);
+  const results = await searchDocs(userAccessToken, keywords, pageSize);
+  return enrichReferences(userAccessToken, results);
+}
 
 /**
  * RAG 流式编排生成器。
@@ -46,7 +53,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
     // 并行搜索（try/catch 防止 502 等网络错误）
     let results = [];
     try {
-      results = await searchDocs(userAccessToken, question, pageSize);
+      results = await searchAndEnrich(userAccessToken, question, provider, pageSize);
     } catch (_err) {
       results = [];
     }
@@ -73,10 +80,10 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
 
   // ── webSearch=false 分支：知识库问答 ──────────────────────────────────────
 
-  // Step 1: 搜索飞书文档
+  // Step 1: 关键词提取 → 搜索飞书文档 → 补全作者/日期
   let results;
   try {
-    results = await searchDocs(userAccessToken, question, pageSize);
+    results = await searchAndEnrich(userAccessToken, question, provider, pageSize);
   } catch (err) {
     const msg = err.message || String(err);
     yield { type: 'references', references: [] };

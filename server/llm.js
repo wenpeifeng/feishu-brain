@@ -100,7 +100,8 @@ async function* streamChat(provider, messages, extraBody = {}) {
   const body = {
     model: provider.model,
     messages,
-    temperature: 0.3,
+    // 不发送 temperature：部分模型（如 kimi-for-coding）只允许 temperature=1，
+    // 发 0.3 会 400。省略后各厂商用各自默认值，兼容所有内置模型。
     max_tokens: 4096,
     stream: true,
     ...extraBody,
@@ -229,7 +230,6 @@ async function askLLM(question, context, history = [], config = null) {
     body: JSON.stringify({
       model: cfg.llmModel,
       messages,
-      temperature: 0.3,
     }),
   });
 
@@ -243,6 +243,36 @@ async function askLLM(question, context, history = [], config = null) {
 }
 
 // ---------------------------------------------------------------------------
+// 关键词提取：飞书搜索是关键词匹配，整句问题会 0 结果。用 LLM 把问题提炼成
+// 空格分隔的核心关键词（"南京分公司的地址在哪里？" → "南京分公司 地址"）。
+// 非流式、低成本；失败则回退原问题。
+// ---------------------------------------------------------------------------
+async function extractKeywords(question, provider) {
+  if (!provider || !provider.apiKey) return question;
+  try {
+    const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${provider.apiKey}` },
+      body: JSON.stringify({
+        model: provider.model,
+        max_tokens: 512,
+        messages: [
+          { role: 'system', content: '你是搜索关键词提取器。把用户问题提炼成用于飞书文档全文检索的核心实体/名词关键词，用单个空格分隔，最多 4 个词。只输出关键词本身，不要解释、不要标点、不要引号。' },
+          { role: 'user', content: question },
+        ],
+      }),
+    });
+    if (!res.ok) return question;
+    const j = await res.json();
+    let kw = (j.choices?.[0]?.message?.content || '').trim();
+    kw = kw.replace(/[，。？！、"'`]/g, ' ').replace(/\s+/g, ' ').trim();
+    return kw || question;
+  } catch (_e) {
+    return question;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -250,5 +280,6 @@ module.exports = {
   askLLM,          // legacy, kept for rag.js compatibility
   askLLMStream,    // Task 5: streaming RAG
   askLLMGeneral,   // Task 5: streaming general / web search
+  extractKeywords, // 关键词提取（改善搜索命中）
   buildPrompt,     // exposed for testing / Task 6 RAG
 };

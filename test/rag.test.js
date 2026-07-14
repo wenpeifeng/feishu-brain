@@ -64,6 +64,7 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
       exports: {
         searchDocs: searchDocsMock || (async () => FAKE_RESULTS),
         fetchDoc:   fetchDocMock   || (async (token, item) => item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B),
+        enrichReferences: async (token, results) => results, // pass-through
       },
     };
 
@@ -73,6 +74,7 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
       exports: {
         askLLMStream:   askLLMStreamMock   || (async function*() { yield '默认回答'; }),
         askLLMGeneral:  askLLMGeneralMock  || (async function*() { yield '默认联网'; }),
+        extractKeywords: async (q) => q, // pass-through
       },
     };
 

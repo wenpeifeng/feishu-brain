@@ -288,8 +288,8 @@ function appendReferencesAfterBubble(msgEl, references) {
     if (ref.url) {
       item.addEventListener('click', function() { window.open(ref.url, '_blank'); });
     }
-    const ownerDisplay = ref.owner && !ref.owner.startsWith('ou_') ? escapeHtml(ref.owner) : '';
-    const dateDisplay = ref.editTime ? formatDate(ref.editTime) : '';
+    const ownerDisplay = ref.ownerName ? escapeHtml(ref.ownerName) : '';
+    const dateDisplay = ref.editTime ? escapeHtml(ref.editTime) : '';  // 已是 YYYY-MM-DD
     const meta = [ownerDisplay, dateDisplay].filter(Boolean).join(' · ');
     item.innerHTML = '<div class="reference-icon">' + getFileIcon(ref) + '</div><div class="reference-info"><div class="reference-title">' + escapeHtml(ref.title || '') + '</div>' + (meta ? '<div class="reference-meta">' + meta + '</div>' : '') + '</div>';
     list.appendChild(item);
@@ -583,7 +583,10 @@ async function shareChat() {
 function setupEventListeners() {
   newChatBtn.addEventListener('click', createNewConversation);
   settingsBtn.addEventListener('click', openSettings);
-  knowledgeBaseBtn.addEventListener('click', openSettings);
+  // v1 暂无独立知识库管理页（上传/管理为 v2）；此按钮仅作「搜索覆盖全部有权限文档」的状态提示
+  knowledgeBaseBtn.addEventListener('click', function () {
+    alert('搜索已覆盖你飞书内有权限的全部文档。\n（知识库上传 / 管理为后续版本功能）');
+  });
   closeSettings.addEventListener('click', closeSettingsModal);
   settingsModal.querySelector('.modal-backdrop').addEventListener('click', closeSettingsModal);
   settingsForm.addEventListener('submit', saveSettings);

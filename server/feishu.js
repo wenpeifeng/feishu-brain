@@ -57,6 +57,69 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
   }));
 }
 
+/** unix 秒(字符串/数字) → YYYY-MM-DD；无效返回 '' */
+function fmtDate(sec) {
+  const n = parseInt(sec, 10);
+  if (!n) return '';
+  const d = new Date(n * 1000);
+  if (isNaN(d.getTime())) return '';
+  const p = x => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * 丰富参考资料：补上「作者姓名」和「修改日期」，对齐飞书知识问答的参考资料展示。
+ * - 日期：drive metadata batch_query（scope drive:drive.metadata:readonly，已授予）
+ * - 姓名：contact users batch（scope contact:user.base:readonly，若未授予则优雅跳过）
+ * 任何子调用失败都不影响主流程，只是少一部分信息。
+ * @returns 同结构，额外带 ownerName、editTime(YYYY-MM-DD)
+ */
+async function enrichReferences(userAccessToken, results) {
+  if (!results || results.length === 0) return results;
+  const auth = { 'Authorization': `Bearer ${userAccessToken}` };
+
+  // 1) 日期（+ owner 兜底）via drive metadata
+  const dateByToken = new Map();
+  try {
+    const request_docs = results
+      .filter(r => r.token && r.type)
+      .map(r => ({ doc_token: r.token, doc_type: r.type }));
+    if (request_docs.length) {
+      const res = await fetch(`${BASE}/drive/v1/metas/batch_query`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_docs }),
+      });
+      const j = await res.json();
+      if (j.code === 0) {
+        for (const m of (j.data?.metas || [])) {
+          dateByToken.set(m.doc_token, fmtDate(m.latest_modify_time));
+        }
+      }
+    }
+  } catch (_e) { /* 日期可选 */ }
+
+  // 2) 作者姓名 via contact batch（需 contact:user.base:readonly，未授予则跳过）
+  const nameById = new Map();
+  const ownerIds = [...new Set(results.map(r => r.owner).filter(Boolean))];
+  if (ownerIds.length) {
+    try {
+      const qs = ownerIds.map(id => 'user_ids=' + encodeURIComponent(id)).join('&');
+      const res = await fetch(`${BASE}/contact/v3/users/batch?user_id_type=open_id&${qs}`, { headers: auth });
+      const j = await res.json();
+      if (j.code === 0) {
+        for (const u of (j.data?.items || [])) nameById.set(u.open_id, u.name);
+      }
+    } catch (_e) { /* 姓名可选 */ }
+  }
+
+  return results.map(r => ({
+    ...r,
+    editTime:  dateByToken.get(r.token) || r.editTime || '',
+    ownerName: nameById.get(r.owner) || '',
+  }));
+}
+
 /**
  * 读取单篇文档内容（以用户身份）
  * @param {string} userAccessToken
@@ -110,4 +173,4 @@ async function fetchDocxContent(userAccessToken, docxToken) {
   return j.data?.content || '';
 }
 
-module.exports = { searchDocs, fetchDoc };
+module.exports = { searchDocs, fetchDoc, enrichReferences };
