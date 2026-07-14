@@ -99,9 +99,9 @@ function mockRes() {
 function dispatch(req, res) {
   return new Promise((resolve, reject) => {
     handleRequest(req, res).then(() => resolve(res)).catch(reject);
-    // 超时保护
+    // 超时保护：若连接未结束则 reject，避免测试假通过
     setTimeout(() => {
-      if (!res.ended) resolve(res);
+      if (!res.ended) reject(new Error('SSE dispatch timeout'));
     }, 3000);
   });
 }
@@ -211,6 +211,72 @@ async function run() {
     // 不应出现 sk- 密钥
     assert.ok(!output.match(/sk-[A-Za-z0-9]+/), 'SSE 输出不应含 sk-* 密钥');
     console.log('  ✓ SSE ask 端点依次输出 references / token / done');
+  }
+
+  // ─── 测试 5：requireAuth 刷新失败 → 401 + 清除会话 ──────────────────────────
+  {
+    // 造一个已过期的 session
+    const expiredToken = createSession({
+      openId: 'ou_expired',
+      name: 'ExpiredUser',
+      avatar: '',
+      userAccessToken: 'uat-expired',
+      refreshToken: 'rft-expired',
+      expireAt: Date.now() - 1000,   // 已过期
+    });
+    // 不加入 cleanup，由本测试自己验证被清除
+
+    // 需要让 router.js 内部的 refreshUserToken 抛错：
+    // 由于 router.js 用了解构 const { refreshUserToken } = require('./auth')，
+    // 必须清除 router 缓存并重新注入 auth mock，再重新 require router。
+    const authPath = require.resolve('../server/auth');
+    const routerPath = require.resolve('../server/router');
+    const origAuthCache = require.cache[authPath];
+    const origRouterCache = require.cache[routerPath];
+
+    try {
+      // 注入 auth stub（refreshUserToken 抛错）
+      require.cache[authPath] = {
+        id: authPath,
+        filename: authPath,
+        loaded: true,
+        exports: {
+          ...origAuthCache.exports,
+          refreshUserToken: async function stubRefresh() {
+            throw new Error('mock: refresh rejected');
+          },
+        },
+      };
+      // 清除 router 缓存，让它重新 require auth（使用 stub）
+      delete require.cache[routerPath];
+      const { handleRequest: handleRequest2 } = require(routerPath);
+
+      const req = mockReq({
+        method: 'GET',
+        url: '/api/conversations',
+        headers: { authorization: `Bearer ${expiredToken}` },
+      });
+      const res = mockRes();
+      await new Promise((resolve, reject) => {
+        handleRequest2(req, res).then(() => resolve(res)).catch(reject);
+        setTimeout(() => { if (!res.ended) reject(new Error('SSE dispatch timeout')); }, 3000);
+      });
+
+      assert.equal(res.statusCode, 401, '刷新失败应返回 401');
+      const data = res.json;
+      assert.equal(data.ok, false, 'ok 应为 false');
+
+      // 会话应已被 removeSession 清除
+      assert.equal(getSession(expiredToken), null, '刷新失败后会话应被清除');
+      console.log('  ✓ requireAuth 刷新失败 → 401 + 会话已清除');
+    } finally {
+      // 恢复真实 auth 和 router 缓存
+      require.cache[authPath] = origAuthCache;
+      delete require.cache[routerPath];
+      require.cache[routerPath] = origRouterCache;
+      // 确保不残留（万一没被清除）
+      removeSession(expiredToken);
+    }
   }
 
   // ─── 清理 ─────────────────────────────────────────────────────────────────

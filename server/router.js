@@ -168,6 +168,11 @@ async function handleRequest(req, res) {
 
   // ── 6. POST /api/config ────────────────────────────────────────────────────
   if (url.pathname === '/api/config' && req.method === 'POST') {
+    const ctx = await requireAuth(req);
+    if (!ctx) {
+      json(res, { ok: false, error: '未登录或登录已过期' }, 401);
+      return;
+    }
     try {
       const body = await parseBody(req);
       const allowed = {};
@@ -333,10 +338,9 @@ async function handleRequest(req, res) {
 
       res.write('event: done\ndata: ' + JSON.stringify({ messageId: asgMsg.id }) + '\n\n');
       res.end();
-    } catch (err) {
-      // 安全：不泄露 token/key
-      const hint = err.hint || '请检查配置或稍后重试';
-      res.write('event: error\ndata: ' + JSON.stringify({ error: '问答失败', hint }) + '\n\n');
+    } catch (_err) {
+      // 安全：不泄露 token/key，不透传 err.message/err.hint
+      res.write('event: error\ndata: ' + JSON.stringify({ error: '问答失败，请稍后重试', hint: '如持续失败，请检查模型配置或重新登录' }) + '\n\n');
       res.end();
     }
     return;
