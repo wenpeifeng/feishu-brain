@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>飞书知识问答</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <span>飞书知识问答</span>
+        </div>
+        <button class="new-chat-btn" id="newChatBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span>新对话</span>
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">知识库</div>
+        <button class="sidebar-kb" id="knowledgeBaseBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>全部知识库</span>
+        </button>
+      </div>
+      <div class="sidebar-section history-section">
+        <div class="sidebar-section-header">
+          <div class="sidebar-section-title">历史对话</div>
+          <div class="search-box" id="historySearchBox">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="historySearch" placeholder="搜索">
+          </div>
+        </div>
+        <nav class="sidebar-nav" id="historyList">
+          <div class="empty-state">暂无历史对话</div>
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        <button class="footer-btn" id="feedbackBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>提交反馈</span>
+        </button>
+        <button class="footer-btn" id="settingsBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>设置</span>
+        </button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="main-header">
+        <h1 id="chatTitle">飞书知识问答</h1>
+        <div class="header-actions">
+          <button class="header-btn" id="shareBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span>分享</span>
+          </button>
+          <div class="user-avatar" id="userAvatar">U</div>
+        </div>
+      </header>
+      <div class="chat-container" id="chatContainer">
+        <div class="welcome" id="welcome">
+          <h2>基于飞书知识库的问答助手</h2>
+          <p>输入问题，我将搜索你的飞书知识库并给出总结回答。</p>
+        </div>
+      </div>
+      <div class="input-area">
+        <div class="input-card">
+          <div class="input-toolbar">
+            <button type="button" class="tool-btn" id="addFileBtn" title="添加附件">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button type="button" class="tool-btn web-search-btn" id="webSearchBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>联网搜索</span>
+            </button>
+          </div>
+          <div class="input-row">
+            <textarea id="questionInput" placeholder="试试输入“/”，支持深入研究、写作、带图提问" rows="1"></textarea>
+            <button id="sendBtn" class="send-btn" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+          <div class="input-hint">AI 基于你有权限的资料生成，数据保密仅你可见</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="settingsModal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>配置</h2>
+        <button class="modal-close" id="closeSettings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="settingsForm">
+          <div class="form-group">
+            <label>LLM API Key</label>
+            <input type="password" name="openaiApiKey" placeholder="sk-...">
+            <div class="field-note" id="apiKeyNote">首次使用需要填写</div>
+          </div>
+          <div class="form-group">
+            <label>LLM 提供商</label>
+            <select name="llmProvider" id="llmProvider">
+              <option value="openai">OpenAI</option>
+              <option value="moonshot">Moonshot (Kimi)</option>
+              <option value="custom">自定义</option>
+            </select>
+          </div>
+
+          <button type="button" class="advanced-toggle" id="advancedToggle">高级设置 ▼</button>
+          <div class="advanced-fields" id="advancedFields">
+            <div class="form-group">
+              <label>模型名称</label>
+              <input type="text" name="llmModel" id="llmModel" placeholder="gpt-4o-mini">
+            </div>
+            <div class="form-group">
+              <label>LLM Base URL</label>
+              <input type="text" name="openaiBaseUrl" id="openaiBaseUrl" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="form-group">
+              <label>飞书 App ID</label>
+              <input type="text" name="appId" placeholder="cli_...">
+            </div>
+            <div class="form-group">
+              <label>飞书 App Secret</label>
+              <input type="password" name="appSecret" placeholder="保存后显示为 ***">
+            </div>
+            <div class="form-group">
+              <label>lark-cli 路径（留空使用 PATH）</label>
+              <input type="text" name="larkCliPath" placeholder="lark-cli">
+            </div>
+            <div class="form-group">
+              <label>飞书身份</label>
+              <select name="larkIdentity">
+                <option value="user">user</option>
+                <option value="bot">bot</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>搜索数量</label>
+                <input type="number" name="pageSize" min="1" max="20" value="9">
+              </div>
+              <div class="form-group">
+                <label>参与总结文档数</label>
+                <input type="number" name="topK" min="1" max="9" value="3">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

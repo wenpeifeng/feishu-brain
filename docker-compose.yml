@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  feishu-kb-qa:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      # 可选：在启动时配置 lark-cli 和 LLM，或在 Web UI 中配置
+      # - LARK_CLI_PATH=lark-cli
+      # - LARK_IDENTITY=user
+      # - OPENAI_API_KEY=your-key
+      # - OPENAI_BASE_URL=https://api.openai.com/v1
+      # - LLM_MODEL=gpt-4o-mini

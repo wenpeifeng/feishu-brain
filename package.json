@@ -1,0 +1,24 @@
+{
+  "name": "feishu-kb-qa",
+  "version": "1.0.0",
+  "description": "基于飞书知识库的 RAG 问答服务",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "mock": "USE_MOCK=true node server/index.js",
+    "test": "node test/api.test.js"
+  },
+  "keywords": [
+    "feishu",
+    "lark",
+    "rag",
+    "knowledge-base"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
