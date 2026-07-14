@@ -36,8 +36,8 @@ function getDefaultConfig() {
     openaiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     llmProvider: process.env.LLM_PROVIDER || 'openai',
     llmModel: process.env.LLM_MODEL || 'gpt-4o-mini',
-    topK: 5,
-    pageSize: 15,
+    topK: 4,
+    pageSize: 10,
   };
 }
 

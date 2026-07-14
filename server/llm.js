@@ -268,7 +268,7 @@ async function extractKeywords(question, provider) {
         model: provider.model,
         max_tokens: 512,
         messages: [
-          { role: 'system', content: '你是搜索关键词提取器。把用户问题提炼成用于飞书文档全文检索的核心实体/名词关键词，用单个空格分隔，最多 4 个词。只输出关键词本身，不要解释、不要标点、不要引号。' },
+          { role: 'system', content: '你是搜索关键词提取器。从用户问题里提炼出最核心的 1-2 个专有名词/实体作为检索关键词，用单个空格分隔。要具体、能唯一定位主题；忽略"事项、情况、问题、有哪些、是什么"这类通用词。只输出关键词本身，不要解释、不要标点、不要引号。例：\n"澳洲迁移事项有哪些" → "澳洲 迁移"\n"清分单是什么" → "清分单"\n"南京分公司的地址在哪里" → "南京分公司"' },
           { role: 'user', content: question },
         ],
       }),

@@ -194,6 +194,7 @@ async function askQuestion() {
   var thinkBox = streamResult.thinkBox;
   var thinkBody = streamResult.thinkBody;
   var reasoningText = '';
+  var pendingReferences = null;
 
   try {
     const res = await authFetch('/api/conversations/' + currentConversationId + '/ask', {
@@ -242,7 +243,8 @@ async function askQuestion() {
         try { payload = JSON.parse(dataStr); } catch (e) { continue; }
 
         if (eventType === 'references' && payload.references) {
-          appendReferencesAfterBubble(msgEl, payload.references);
+          // 先缓存，等回答生成完再渲染（参考资料出现在答案之后，像飞书）
+          pendingReferences = payload.references;
         } else if (eventType === 'reasoning' && payload.delta) {
           // 深度思考过程：实时显示，让用户看到进度而不是干等
           reasoningText += payload.delta;
@@ -262,6 +264,10 @@ async function askQuestion() {
           bubbleEl.innerHTML = renderMarkdown(fullText);
           scrollToBottom();
         } else if (eventType === 'done') {
+          // 回答生成完，此时才渲染参考资料（在答案下方）
+          if (pendingReferences && pendingReferences.length) {
+            msgEl.after(buildReferencesSection(pendingReferences));
+          }
           appendDoneNote(msgEl);
           updateConversationTitleFromCurrent(question);
         } else if (eventType === 'error') {

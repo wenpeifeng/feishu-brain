@@ -100,7 +100,8 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
     if (titleKey) seenTitle.add(titleKey);
     merged.push({ ...r, index: merged.length + 1 });
   }
-  return merged;
+  // 控制总数，避免一堆低相关文档（wiki 已优先靠前）
+  return merged.slice(0, pageSize);
 }
 
 /** unix 秒(字符串/数字) → YYYY-MM-DD；无效返回 '' */
