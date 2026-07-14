@@ -191,6 +191,9 @@ async function askQuestion() {
   var streamResult = appendStreamingBubble();
   var bubbleEl = streamResult.bubbleEl;
   var msgEl = streamResult.msgEl;
+  var thinkBox = streamResult.thinkBox;
+  var thinkBody = streamResult.thinkBody;
+  var reasoningText = '';
 
   try {
     const res = await authFetch('/api/conversations/' + currentConversationId + '/ask', {
@@ -240,12 +243,24 @@ async function askQuestion() {
 
         if (eventType === 'references' && payload.references) {
           appendReferencesAfterBubble(msgEl, payload.references);
+        } else if (eventType === 'reasoning' && payload.delta) {
+          // 深度思考过程：实时显示，让用户看到进度而不是干等
+          reasoningText += payload.delta;
+          thinkBox.style.display = 'block';
+          thinkBody.textContent = reasoningText;
+          scrollToBottom();
         } else if (eventType === 'token' && payload.delta) {
+          // 首个正文 token 到达：思考结束，自动收起思考框
+          if (fullText === '' && reasoningText) {
+            thinkBox.classList.add('collapsed');
+            msgEl.querySelector('.think-label').textContent = '已深度思考';
+            msgEl.querySelector('.think-toggle').textContent = '展开';
+            var sp = msgEl.querySelector('.think-spinner'); if (sp) sp.remove();
+          }
           fullText += payload.delta;
+          bubbleEl.classList.remove('streaming');
           bubbleEl.innerHTML = renderMarkdown(fullText);
           scrollToBottom();
-        } else if (eventType === 'sources' && payload.sources) {
-          appendSourcesAfterBubble(msgEl, payload.sources);
         } else if (eventType === 'done') {
           appendDoneNote(msgEl);
           updateConversationTitleFromCurrent(question);
@@ -267,16 +282,31 @@ async function askQuestion() {
 }
 
 function appendStreamingBubble() {
+  hideWelcome();
   const msgEl = document.createElement('div');
   msgEl.className = 'message';
-  msgEl.innerHTML = '<div class="avatar">AI</div><div class="message-content"><div class="message-bubble markdown-body streaming"><div class="loading-dots"><span></span><span></span><span></span></div></div></div>';
+  msgEl.innerHTML =
+    '<div class="avatar">AI</div><div class="message-content">' +
+      '<div class="think-box" style="display:none;">' +
+        '<div class="think-head"><span class="think-spinner"></span><span class="think-label">正在深度思考…</span><span class="think-toggle">收起</span></div>' +
+        '<div class="think-body"></div>' +
+      '</div>' +
+      '<div class="message-bubble markdown-body streaming"><div class="loading-dots"><span></span><span></span><span></span></div></div>' +
+    '</div>';
   chatContainer.appendChild(msgEl);
   scrollToBottom();
-  const bubbleEl = msgEl.querySelector('.message-bubble');
-  return { bubbleEl: bubbleEl, msgEl: msgEl };
+  const thinkBox = msgEl.querySelector('.think-box');
+  const thinkBody = msgEl.querySelector('.think-body');
+  // 点击标题展开/收起思考过程
+  msgEl.querySelector('.think-head').addEventListener('click', function () {
+    const collapsed = thinkBox.classList.toggle('collapsed');
+    msgEl.querySelector('.think-toggle').textContent = collapsed ? '展开' : '收起';
+  });
+  return { bubbleEl: msgEl.querySelector('.message-bubble'), msgEl: msgEl, thinkBox: thinkBox, thinkBody: thinkBody };
 }
 
-function appendReferencesAfterBubble(msgEl, references) {
+// 统一的参考资料区块构建（飞书紧凑编号列表）。流式与历史加载共用，样式一致。
+function buildReferencesSection(references) {
   const section = document.createElement('div');
   section.className = 'references';
   const titleEl = document.createElement('div');
@@ -288,6 +318,7 @@ function appendReferencesAfterBubble(msgEl, references) {
   references.forEach(function(ref, i) {
     const item = document.createElement('div');
     item.className = 'reference-item';
+    // 作者：仅当有真实姓名（ownerName）时显示，绝不显示 open_id
     const author = ref.ownerName
       ? '<span class="ref-author"><span class="ref-avatar">' + escapeHtml(ref.ownerName.slice(0, 1)) + '</span>' + escapeHtml(ref.ownerName) + '</span>'
       : '';
@@ -300,41 +331,27 @@ function appendReferencesAfterBubble(msgEl, references) {
     list.appendChild(item);
   });
   section.appendChild(list);
-  msgEl.after(section);
+  return section;
+}
+
+function appendReferencesAfterBubble(msgEl, references) {
+  msgEl.after(buildReferencesSection(references));
   scrollToBottom();
 }
 
-function appendSourcesAfterBubble(msgEl, sources) {
-  const section = document.createElement('div');
-  section.className = 'sources';
-  section.innerHTML = '<div class="sources-title">来源文档</div>';
-  const list = document.createElement('ul');
-  list.className = 'sources-list';
-  sources.forEach(function(src) {
-    const li = document.createElement('li');
-    li.innerHTML = '<a href="' + safeUrl(src.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(src.title || '') + '</a>';
-    list.appendChild(li);
-  });
-  section.appendChild(list);
-  // Insert after existing references section if present, otherwise after msgEl
-  const existingRefs = msgEl.nextElementSibling;
-  if (existingRefs && existingRefs.classList.contains('references')) {
-    existingRefs.after(section);
-  } else {
-    msgEl.after(section);
-  }
-  scrollToBottom();
+// 有真实消息时移除欢迎语占位，避免欢迎语与对话内容重叠
+function hideWelcome() {
+  const w = chatContainer.querySelector('.welcome');
+  if (w) w.remove();
 }
 
 function appendDoneNote(msgEl) {
   const note = document.createElement('div');
   note.className = 'ai-disclaimer';
   note.textContent = 'AI 基于你有权限的资料生成，数据保密仅你可见';
-  // Find last sibling (sources or refs) and insert after that
+  // 插到该 AI 消息其参考资料区块之后
   let lastSib = msgEl;
-  while (lastSib.nextElementSibling &&
-         (lastSib.nextElementSibling.classList.contains('references') ||
-          lastSib.nextElementSibling.classList.contains('sources'))) {
+  while (lastSib.nextElementSibling && lastSib.nextElementSibling.classList.contains('references')) {
     lastSib = lastSib.nextElementSibling;
   }
   lastSib.after(note);
@@ -395,6 +412,7 @@ function renderConversation(conversation) {
 
 function appendUserMessage(content, scroll) {
   if (scroll === undefined) scroll = true;
+  hideWelcome();
   const msg = document.createElement('div');
   msg.className = 'message user';
   msg.innerHTML = '<div class="avatar">我</div><div class="message-content"><div class="message-bubble">' + escapeHtml(content) + '</div></div>';
@@ -404,6 +422,7 @@ function appendUserMessage(content, scroll) {
 
 function appendAssistantMessage(content, references, sources, mock, scroll) {
   if (scroll === undefined) scroll = true;
+  hideWelcome();
   const msg = document.createElement('div');
   msg.className = 'message';
   let html = '<div class="avatar">AI</div><div class="message-content">';
@@ -414,45 +433,11 @@ function appendAssistantMessage(content, references, sources, mock, scroll) {
   msg.innerHTML = html;
   chatContainer.appendChild(msg);
 
+  // 参考资料紧跟在该 AI 消息之后（不再有单独的"来源文档"区块）
   if (references && references.length > 0) {
-    appendReferences(references);
-  }
-  if (sources && sources.length > 0) {
-    appendSources(sources);
+    msg.after(buildReferencesSection(references));
   }
   if (scroll) scrollToBottom();
-}
-
-function appendReferences(references) {
-  const section = document.createElement('div');
-  section.className = 'references';
-  section.innerHTML = '<div class="references-title">为你找到 ' + references.length + ' 篇参考资料</div>';
-  const list = document.createElement('div');
-  list.className = 'references-list';
-  references.forEach(function(ref) {
-    const item = document.createElement('div');
-    item.className = 'reference-item';
-    item.addEventListener('click', function() { if (ref.url) window.open(ref.url, '_blank'); });
-    item.innerHTML = '<div class="reference-icon">' + getFileIcon(ref) + '</div><div class="reference-info"><div class="reference-title">' + escapeHtml(ref.title || '') + '</div><div class="reference-meta">' + escapeHtml(ref.owner || '') + (ref.owner && (ref.date || ref.editTime) ? ' · ' : '') + formatDate(ref.date || ref.editTime) + '</div></div>';
-    list.appendChild(item);
-  });
-  section.appendChild(list);
-  chatContainer.appendChild(section);
-}
-
-function appendSources(sources) {
-  const section = document.createElement('div');
-  section.className = 'sources';
-  section.innerHTML = '<div class="sources-title">来源文档</div>';
-  const list = document.createElement('ul');
-  list.className = 'sources-list';
-  sources.forEach(function(src) {
-    const li = document.createElement('li');
-    li.innerHTML = '<a href="' + safeUrl(src.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(src.title || '') + '</a>';
-    list.appendChild(li);
-  });
-  section.appendChild(list);
-  chatContainer.appendChild(section);
 }
 
 function scrollToBottom() {

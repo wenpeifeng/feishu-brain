@@ -278,10 +278,12 @@ body {
 
 .chat-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 24px 32px;
   display: flex;
   flex-direction: column;
+  align-items: center;   /* 内容居中成一列 */
 }
 
 .welcome {
@@ -290,6 +292,45 @@ body {
   text-align: center;
   padding: 40px 20px;
 }
+
+/* 深度思考框（推理模型的思考过程，DeepSeek 风格） */
+.think-box {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 0 8px 44px;
+  border-left: 2px solid #d0d3d6;
+  background: #fafbfc;
+  border-radius: 0 8px 8px 0;
+  overflow: hidden;
+}
+.think-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #646a73;
+  cursor: pointer;
+  user-select: none;
+}
+.think-toggle { margin-left: auto; color: #8f959e; font-size: 12px; }
+.think-spinner {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #d0d3d6; border-top-color: #3370ff;
+  animation: think-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes think-spin { to { transform: rotate(360deg); } }
+.think-body {
+  padding: 0 12px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #8f959e;
+  white-space: pre-wrap;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.think-box.collapsed .think-body { display: none; }
 
 .welcome h2 {
   font-size: 22px;
@@ -308,13 +349,11 @@ body {
   display: flex;
   gap: 12px;
   margin-bottom: 20px;
-  max-width: 900px;
+  max-width: 800px;
   width: 100%;
-  align-self: flex-start;
 }
 
 .message.user {
-  align-self: flex-end;
   flex-direction: row-reverse;
 }
 
@@ -343,10 +382,10 @@ body {
 .message-bubble {
   padding: 12px 16px;
   border-radius: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 14px;
-  line-height: 1.7;
+  background: #fff;
+  border: 1px solid #eceef1;
+  font-size: 15px;
+  line-height: 1.75;
   word-break: break-word;
 }
 
@@ -423,9 +462,10 @@ body {
 
 .references {
   margin-top: 18px;
+  margin-bottom: 8px;
   width: 100%;
-  max-width: 900px;
-  align-self: flex-start;
+  max-width: 800px;
+  padding-left: 44px;   /* 与 AI 气泡左对齐（让开头像列） */
 }
 
 .references-title {
@@ -862,12 +902,11 @@ body {
 
 /* AI disclaimer note */
 .ai-disclaimer {
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 6px 0 12px;
-  max-width: 900px;
+  font-size: 13px;
+  color: #8f959e;
+  padding: 4px 0 16px 44px;
+  max-width: 800px;
   width: 100%;
-  align-self: flex-start;
   text-align: left;
 }
 

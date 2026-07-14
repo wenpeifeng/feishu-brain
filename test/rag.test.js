@@ -72,8 +72,8 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
     require.cache[llmPath] = {
       id: llmPath, filename: llmPath, loaded: true,
       exports: {
-        askLLMStream:   askLLMStreamMock   || (async function*() { yield '默认回答'; }),
-        askLLMGeneral:  askLLMGeneralMock  || (async function*() { yield '默认联网'; }),
+        askLLMStream:   askLLMStreamMock   || (async function*() { yield { type: 'answer', text: '默认回答' }; }),
+        askLLMGeneral:  askLLMGeneralMock  || (async function*() { yield { type: 'answer', text: '默认联网' }; }),
         extractKeywords: async (q) => q, // pass-through
       },
     };
@@ -128,8 +128,8 @@ async function runTests() {
         return item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B;
       },
       askLLMStreamMock: async function*(q, docs, hist, provider) {
-        yield '回答第一段';
-        yield '回答第二段';
+        yield { type: 'answer', text: '回答第一段' };
+        yield { type: 'answer', text: '回答第二段' };
       },
     });
 
@@ -219,12 +219,12 @@ async function runTests() {
       fetchDocMock: async (userAccessToken, item) => item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B,
       askLLMStreamMock: async function*() {
         streamCalled = true;
-        yield '文档问答';
+        yield { type: 'answer', text: '文档问答' };
       },
       askLLMGeneralMock: async function*(question, history, provider, webSearch) {
         generalCalled = true;
         if (!webSearch) throw new Error('webSearch should be true');
-        yield '联网回答';
+        yield { type: 'answer', text: '联网回答' };
       },
     });
 
@@ -276,7 +276,7 @@ async function runTests() {
     const runRAGStream = loadRagWithMocks({
       searchDocsMock: async (uaToken) => { seen.push({ fn: 'search', uaToken }); return FAKE_RESULTS; },
       fetchDocMock: async (uaToken, item) => { seen.push({ fn: 'fetch', uaToken }); return { title: item.title, content: 'x' }; },
-      askLLMStreamMock: async function*() { yield '答'; },
+      askLLMStreamMock: async function*() { yield { type: 'answer', text: '答' }; },
     });
 
     await collect(runRAGStream(USER, 'q', HISTORY, false, BASE_CONFIG));

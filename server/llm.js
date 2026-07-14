@@ -29,11 +29,17 @@ function buildPrompt(question, docs) {
     return `文档 ${i + 1}：《${doc.title}》\n${snippet}\n`;
   }).join('\n---\n');
 
-  return `请根据以下飞书文档内容回答用户问题。请尽量引用文档标题，并给出准确、简洁的回答。\n\n${docText}\n\n用户问题：${question}\n\n请用中文回答。`;
+  return `以下是可参考的资料，请据此回答用户的问题。\n\n${docText}\n\n用户问题：${question}`;
 }
 
-const SYSTEM_KB = '你是一个基于飞书知识库文档的智能问答助手，请用中文回答，并尽量引用相关文档标题。';
-const SYSTEM_GENERAL = '你是一个智能助手，请用中文回答问题。';
+const SYSTEM_KB = [
+  '你是一个智能问答助手。用户会给你一些参考资料，请基于这些资料，直接、自然地回答用户的问题，就像正常对话一样。',
+  '要求：',
+  '1. 直接回答问题本身，不要复述问题，不要说"根据文档""参考资料显示"这类开场白。',
+  '2. 绝对不要在回答里写出文档名/标题（如《xxx》），也不要标注引用来源——来源已单独展示在下方，正文里出现文档名是多余的。',
+  '3. 回答准确、简洁、有条理，中文。信息不足时如实说明，不要编造。',
+].join('\n');
+const SYSTEM_GENERAL = '你是一个智能助手，直接、自然地用中文回答用户问题，不要复述问题、不要多余的客套。';
 
 /**
  * Read SSE lines from a ReadableStream body and yield parsed delta objects.
@@ -76,9 +82,13 @@ async function* parseSseStream(body) {
         const delta = parsed?.choices?.[0]?.delta;
         if (!delta) continue;
 
-        // Only yield content; ignore reasoning_content
+        // 推理模型：先出 reasoning_content（思考），再出 content（正文）。
+        // 两者都流式 yield，前端把思考显示在"深度思考"框里。
+        if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
+          yield { type: 'reasoning', text: delta.reasoning_content };
+        }
         if (typeof delta.content === 'string' && delta.content.length > 0) {
-          yield delta.content;
+          yield { type: 'answer', text: delta.content };
         }
       }
     }
@@ -102,7 +112,8 @@ async function* streamChat(provider, messages, extraBody = {}) {
     messages,
     // 不发送 temperature：部分模型（如 kimi-for-coding）只允许 temperature=1，
     // 发 0.3 会 400。省略后各厂商用各自默认值，兼容所有内置模型。
-    max_tokens: 4096,
+    // 推理模型思考会占大量 token，放宽到 8192 避免正文被截断。
+    max_tokens: 8192,
     stream: true,
     ...extraBody,
   };

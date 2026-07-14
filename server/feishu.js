@@ -88,12 +88,16 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
   if (driveR.status === 'rejected' && wikiR.status === 'rejected') {
     throw new Error(driveR.reason?.message || wikiR.reason?.message || 'feishu search failed');
   }
-  // wiki 优先（工作文档多在知识库），再拼云盘，按 token 去重
-  const seen = new Set();
+  // wiki 优先（工作文档多在知识库），再拼云盘，按 token + 标题双重去重
+  const seenToken = new Set();
+  const seenTitle = new Set();
   const merged = [];
   for (const r of [...wiki, ...drive]) {
-    if (!r.token || seen.has(r.token)) continue;
-    seen.add(r.token);
+    if (!r.token || seenToken.has(r.token)) continue;
+    const titleKey = (r.title || '').trim();
+    if (titleKey && seenTitle.has(titleKey)) continue;  // 同名文档只保留一份
+    seenToken.add(r.token);
+    if (titleKey) seenTitle.add(titleKey);
     merged.push({ ...r, index: merged.length + 1 });
   }
   return merged;

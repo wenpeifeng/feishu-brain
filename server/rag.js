@@ -61,8 +61,9 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
     yield { type: 'references', references: results };
 
     try {
-      for await (const delta of askLLMGeneral(question, history, provider, true)) {
-        yield { type: 'token', delta };
+      for await (const chunk of askLLMGeneral(question, history, provider, true)) {
+        if (chunk.type === 'reasoning') yield { type: 'reasoning', delta: chunk.text };
+        else yield { type: 'token', delta: chunk.text };
       }
     } catch (err) {
       const msg = err.message || String(err);
@@ -113,8 +114,9 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
 
   // Step 5: 流式生成回答
   try {
-    for await (const delta of askLLMStream(question, docs, history, provider)) {
-      yield { type: 'token', delta };
+    for await (const chunk of askLLMStream(question, docs, history, provider)) {
+      if (chunk.type === 'reasoning') yield { type: 'reasoning', delta: chunk.text };
+      else yield { type: 'token', delta: chunk.text };
     }
   } catch (err) {
     const msg = err.message || String(err);
