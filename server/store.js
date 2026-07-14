@@ -57,9 +57,12 @@ function updateConfig(newConfig) {
   return configCache;
 }
 
+// 内部：获取所有对话（已过滤无 ownerOpenId 的旧 mock 数据）
 function getConversations() {
   if (conversationsCache) return conversationsCache;
-  conversationsCache = readJSON(CONVERSATIONS_FILE, []);
+  const raw = readJSON(CONVERSATIONS_FILE, []);
+  // 迁移：过滤掉无 ownerOpenId 的旧 mock 数据
+  conversationsCache = raw.filter(c => c.ownerOpenId);
   return conversationsCache;
 }
 
@@ -68,10 +71,16 @@ function saveConversations(conversations) {
   writeJSON(CONVERSATIONS_FILE, conversations);
 }
 
-function createConversation(title = '新对话') {
+// ── 公开接口（全部按 ownerOpenId 隔离） ──────────────────────────
+
+/**
+ * 创建对话，含 ownerOpenId 字段
+ */
+function createConversation(ownerOpenId, title = '新对话') {
   const conversations = getConversations();
   const conversation = {
     id: `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ownerOpenId,
     title,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -82,43 +91,69 @@ function createConversation(title = '新对话') {
   return conversation;
 }
 
-function getConversation(id) {
-  return getConversations().find(c => c.id === id);
+/**
+ * 返回属于该 owner 的对话数组（倒序，即创建时间从新到旧）
+ */
+function getConversationsFor(ownerOpenId) {
+  return getConversations().filter(c => c.ownerOpenId === ownerOpenId);
 }
 
-function deleteConversation(id) {
-  const conversations = getConversations().filter(c => c.id !== id);
+/**
+ * 按 id + ownerOpenId 获取对话；id 不存在或 owner 不匹配返回 null（防 IDOR）
+ */
+function getConversationOwned(id, ownerOpenId) {
+  const conv = getConversations().find(c => c.id === id);
+  if (!conv || conv.ownerOpenId !== ownerOpenId) return null;
+  return conv;
+}
+
+/**
+ * 只删属于该 owner 的对话；不属于则返回 false
+ */
+function deleteConversationOwned(id, ownerOpenId) {
+  const conversations = getConversations();
+  const idx = conversations.findIndex(c => c.id === id);
+  if (idx === -1) return false;
+  if (conversations[idx].ownerOpenId !== ownerOpenId) return false;
+  conversations.splice(idx, 1);
   saveConversations(conversations);
+  return true;
 }
 
-function addMessage(conversationId, message) {
+/**
+ * 追加消息前校验 owner；不匹配返回 null 且不写入
+ */
+function addMessage(conversationId, ownerOpenId, message) {
   const conversations = getConversations();
   const conversation = conversations.find(c => c.id === conversationId);
   if (!conversation) return null;
+  if (conversation.ownerOpenId !== ownerOpenId) return null;
   conversation.messages.push(message);
   conversation.updatedAt = new Date().toISOString();
   saveConversations(conversations);
   return conversation;
 }
 
-function updateConversationTitle(conversationId, title) {
+/**
+ * 更新标题，校验 owner；不匹配返回 null
+ */
+function updateConversationTitleOwned(id, ownerOpenId, title) {
   const conversations = getConversations();
-  const conversation = conversations.find(c => c.id === conversationId);
-  if (conversation) {
-    conversation.title = title;
-    conversation.updatedAt = new Date().toISOString();
-    saveConversations(conversations);
-  }
+  const conversation = conversations.find(c => c.id === id);
+  if (!conversation || conversation.ownerOpenId !== ownerOpenId) return null;
+  conversation.title = title;
+  conversation.updatedAt = new Date().toISOString();
+  saveConversations(conversations);
   return conversation;
 }
 
 module.exports = {
   getConfig,
   updateConfig,
-  getConversations,
   createConversation,
-  getConversation,
-  deleteConversation,
+  getConversationsFor,
+  getConversationOwned,
+  deleteConversationOwned,
   addMessage,
-  updateConversationTitle,
+  updateConversationTitleOwned,
 };
