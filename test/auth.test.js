@@ -1,6 +1,7 @@
-const a = require('../server/auth');
 const assert = require('assert');
+process.env.FEISHU_APP_SECRET = 'test_secret';
 process.env.FEISHU_APP_ID = 'cli_test'; process.env.APP_BASE_URL='http://localhost:3000';
+const a = require('../server/auth');
 const st = a.signState({ redirect: '/x' });
 assert.deepEqual(a.verifyState(st).redirect, '/x');
 assert.equal(a.verifyState('tampered.sig'), null);

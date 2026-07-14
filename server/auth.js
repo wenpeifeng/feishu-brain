@@ -30,7 +30,9 @@ function redirectUri() {
 }
 
 function secretKey() {
-  return process.env.FEISHU_APP_SECRET || 'dev';
+  const k = process.env.FEISHU_APP_SECRET;
+  if (!k) throw new Error('FEISHU_APP_SECRET is not set');
+  return k;
 }
 
 // ── State 签名 / 验证（防 CSRF）────────────────────────────────────────────────
@@ -54,7 +56,10 @@ function signState(payload) {
  */
 function verifyState(state) {
   if (!state || !state.includes('.')) return null;
-  const [body, sig] = state.split('.');
+  const idx = state.indexOf('.');
+  if (idx === -1) return null;
+  const body = state.slice(0, idx);
+  const sig = state.slice(idx + 1);
   const expected = crypto.createHmac('sha256', secretKey()).update(body).digest('base64url');
   if (sig !== expected) return null;
   try {
@@ -101,7 +106,7 @@ async function getAppAccessToken() {
     }),
   });
   const j = await r.json();
-  if (j.code !== 0) throw new Error('app_access_token failed: ' + JSON.stringify(j));
+  if (j.code !== 0) throw new Error(`app_access_token failed: code=${j.code} msg=${j.msg}`);
 
   _appTok = j.app_access_token;
   _appExp = Date.now() + (j.expire || 7200) * 1000;
@@ -132,7 +137,7 @@ async function exchangeCode(code) {
     body: JSON.stringify({ grant_type: 'authorization_code', code }),
   });
   const j = await r.json();
-  if (j.code !== 0) throw new Error('exchange code failed: ' + JSON.stringify(j));
+  if (j.code !== 0) throw new Error(`exchange code failed: code=${j.code} msg=${j.msg}`);
 
   const d = j.data;
   return {
@@ -169,7 +174,7 @@ async function refreshUserToken(refreshToken) {
     body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: refreshToken }),
   });
   const j = await r.json();
-  if (j.code !== 0) throw new Error('refresh failed: ' + JSON.stringify(j));
+  if (j.code !== 0) throw new Error(`refresh failed: code=${j.code} msg=${j.msg}`);
 
   const d = j.data;
   return {
