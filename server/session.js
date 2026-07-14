@@ -25,7 +25,10 @@ function saveToDisk() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const obj = {};
   for (const [token, ctx] of sessions.entries()) {
-    obj[token] = ctx;
+    // 安全：用户自填的 LLM apiKey 只留在内存，绝不落盘（避免会话文件泄露密钥）。
+    // 服务重启后需重新填写——正是"每次登录填一次、缓存"的语义。
+    const { llm, ...rest } = ctx;
+    obj[token] = llm ? { ...rest, llm: { ...llm, apiKey: '' } } : rest;
   }
   fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
 }
