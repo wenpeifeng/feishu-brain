@@ -169,7 +169,7 @@ async function run() {
     const skMatch = body.match(/sk-[A-Za-z0-9]+/);
     assert.ok(!skMatch, `config 响应不应含 sk-* 密钥，实际: ${body}`);
     const data = res.json;
-    assert.ok(!('apiKey' in (data.config || {})), 'config 不应回传 apiKey 明文');
+    assert.equal(data.config.apiKey, '', '未设置时 apiKey 应为空(不泄露 userAccessToken)');
     removeSession(token);
     console.log('  ✓ GET /api/config 需登录且不含 apiKey 明文');
   }

@@ -86,7 +86,9 @@ function sanitizedConfig(ctx) {
   const g = getConfig();
   return {
     providerId: llm.providerId || 'glm',
-    hasKey: !!llm.apiKey,   // 前端据此显示"已设置/未设置 API Key"
+    hasKey: !!llm.apiKey,
+    // 回显该用户自己填的 key（仅回给本人；前端默认打码、点眼睛可看）
+    apiKey: llm.apiKey || '',
     custom: { baseUrl: llm.baseUrl || '', model: llm.model || '' },
     topK: g.topK,
     pageSize: g.pageSize,

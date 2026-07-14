@@ -519,12 +519,14 @@ function renderProviderDropdown(providers, cfg) {
   if (customBaseUrl) customBaseUrl.value = (cfg.custom && cfg.custom.baseUrl) || '';
   if (customModel) customModel.value = (cfg.custom && cfg.custom.model) || '';
 
-  // API Key 状态 + 清空输入框（不回显明文）
+  // API Key 回显（默认打码，点眼睛可看）
   const apiKeyInput = document.getElementById('apiKeyInput');
-  if (apiKeyInput) apiKeyInput.value = '';
+  if (apiKeyInput) { apiKeyInput.value = cfg.apiKey || ''; apiKeyInput.type = 'password'; }
+  const keyEye = document.getElementById('keyEye');
+  if (keyEye) keyEye.textContent = '👁';
   const keyStatus = document.getElementById('keyStatus');
   if (keyStatus) {
-    keyStatus.textContent = cfg.hasKey ? '· 已设置（留空不改）' : '· 未设置，请填写';
+    keyStatus.textContent = cfg.hasKey ? '· 已设置' : '· 未设置，请填写';
     keyStatus.className = 'key-status ' + (cfg.hasKey ? 'ok' : 'warn');
   }
 
@@ -698,6 +700,11 @@ function setupEventListeners() {
   closeSettings.addEventListener('click', closeSettingsModal);
   settingsModal.querySelector('.modal-backdrop').addEventListener('click', closeSettingsModal);
   settingsForm.addEventListener('submit', saveSettings);
+  var keyEyeBtn = document.getElementById('keyEye');
+  if (keyEyeBtn) keyEyeBtn.addEventListener('click', function () {
+    var inp = document.getElementById('apiKeyInput');
+    if (inp) { inp.type = inp.type === 'password' ? 'text' : 'password'; keyEyeBtn.textContent = inp.type === 'text' ? '🙈' : '👁'; }
+  });
   sendBtn.addEventListener('click', askQuestion);
   webSearchBtn.addEventListener('click', toggleWebSearch);
   shareBtn.addEventListener('click', shareChat);
