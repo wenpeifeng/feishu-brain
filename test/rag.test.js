@@ -202,8 +202,8 @@ async function runTests() {
     const tokenEvs = events.filter(e => e.type === 'token');
     if (tokenEvs.length === 0) throw new Error('no error token emitted');
     const combined = tokenEvs.map(e => e.delta).join('');
-    if (!combined.includes('失败') && !combined.includes('错误') && !combined.includes('搜索')) {
-      throw new Error(`error token "${combined}" missing expected content`);
+    if (!combined.includes('搜索飞书文档失败')) {
+      throw new Error(`error token "${combined}" missing expected prefix "搜索飞书文档失败"`);
     }
   });
 

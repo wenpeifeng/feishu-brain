@@ -94,10 +94,11 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   // Step 3: 取前 topK 项，fetchDoc 拿正文
   const topItems = results.slice(0, topK);
   const docs = await Promise.all(
-    topItems.map(async item => {
-      const { title, content } = await fetchDoc(userAccessToken, item);
-      return { ...item, title: title || item.title, content };
-    })
+    topItems.map(item =>
+      fetchDoc(userAccessToken, item)
+        .then(d => ({ ...item, title: d.title || item.title, content: d.content || '' }))
+        .catch(() => ({ ...item, content: '' }))
+    )
   );
 
   // Step 4: 先 yield references（让前端立刻显示参考资料）
