@@ -1,0 +1,10 @@
+const a = require('../server/auth');
+const assert = require('assert');
+process.env.FEISHU_APP_ID = 'cli_test'; process.env.APP_BASE_URL='http://localhost:3000';
+const st = a.signState({ redirect: '/x' });
+assert.deepEqual(a.verifyState(st).redirect, '/x');
+assert.equal(a.verifyState('tampered.sig'), null);
+const url = a.buildAuthorizeUrl(st);
+assert.ok(url.includes('app_id=cli_test'));
+assert.ok(url.includes('redirect_uri=') && url.includes('authen%2Fv1%2Fauthorize') === false);
+console.log('auth ok');
