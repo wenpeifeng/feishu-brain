@@ -1,0 +1,10 @@
+const s = require('../server/session');
+const assert = require('assert');
+const t = s.createSession({ openId: 'ou_1', name: 'A', userAccessToken: 'u1', refreshToken: 'r1', expireAt: 1 });
+assert.equal(t.length, 32);
+assert.equal(s.getSession(t).openId, 'ou_1');
+s.updateTokens(t, { userAccessToken: 'u2', refreshToken: 'r2', expireAt: 2 });
+assert.equal(s.getSession(t).userAccessToken, 'u2');
+s.removeSession(t);
+assert.equal(s.getSession(t), null);
+console.log('session ok');
