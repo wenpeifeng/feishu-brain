@@ -78,7 +78,9 @@ function verifyState(state) {
  */
 // 需要向用户申请的 scope。飞书 OAuth 只授予 authorize URL 里显式请求的 user scope，
 // 应用后台"开通"某权限 ≠ 用户 token 自动拥有——必须在此请求，用户同意后 token 才带上。
-const DEFAULT_SCOPES = 'search:docs:read wiki:wiki:readonly docx:document:readonly wiki:node:read drive:drive.metadata:readonly contact:user.base:readonly offline_access';
+// 只请求应用确实已开通的 scope。contact:user.base:readonly（作者姓名用）该应用未开通，
+// 请求它会导致 authorize 报 20027 阻断登录，故移除；作者姓名为可选增强，enrich 时优雅跳过。
+const DEFAULT_SCOPES = 'search:docs:read wiki:wiki:readonly docx:document:readonly wiki:node:read drive:drive.metadata:readonly offline_access';
 
 function buildAuthorizeUrl(state) {
   const u = new URL(FEISHU + '/open-apis/authen/v1/authorize');

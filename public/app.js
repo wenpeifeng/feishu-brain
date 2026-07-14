@@ -279,19 +279,24 @@ function appendStreamingBubble() {
 function appendReferencesAfterBubble(msgEl, references) {
   const section = document.createElement('div');
   section.className = 'references';
-  section.innerHTML = '<div class="references-title">为你找到 ' + references.length + ' 篇参考资料</div>';
+  const titleEl = document.createElement('div');
+  titleEl.className = 'references-title';
+  titleEl.textContent = '为你找到 ' + references.length + ' 篇参考资料';
+  section.appendChild(titleEl);
   const list = document.createElement('div');
   list.className = 'references-list';
-  references.forEach(function(ref) {
+  references.forEach(function(ref, i) {
     const item = document.createElement('div');
     item.className = 'reference-item';
-    if (ref.url) {
-      item.addEventListener('click', function() { window.open(ref.url, '_blank'); });
-    }
-    const ownerDisplay = ref.ownerName ? escapeHtml(ref.ownerName) : '';
-    const dateDisplay = ref.editTime ? escapeHtml(ref.editTime) : '';  // 已是 YYYY-MM-DD
-    const meta = [ownerDisplay, dateDisplay].filter(Boolean).join(' · ');
-    item.innerHTML = '<div class="reference-icon">' + getFileIcon(ref) + '</div><div class="reference-info"><div class="reference-title">' + escapeHtml(ref.title || '') + '</div>' + (meta ? '<div class="reference-meta">' + meta + '</div>' : '') + '</div>';
+    const author = ref.ownerName
+      ? '<span class="ref-author"><span class="ref-avatar">' + escapeHtml(ref.ownerName.slice(0, 1)) + '</span>' + escapeHtml(ref.ownerName) + '</span>'
+      : '';
+    const date = ref.editTime ? '<span class="ref-date">' + escapeHtml(ref.editTime) + '</span>' : '';
+    item.innerHTML =
+      '<span class="ref-num">' + (i + 1) + '</span>' +
+      '<span class="ref-icon">' + getFileIcon(ref) + '</span>' +
+      '<a class="ref-title" href="' + safeUrl(ref.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(ref.title || '') + '</a>' +
+      author + date;
     list.appendChild(item);
   });
   section.appendChild(list);
@@ -621,10 +626,16 @@ function setupInput() {
 function getFileIcon(ref) {
   const title = (ref.title || '').toLowerCase();
   const type = (ref.type || '').toLowerCase();
-  if (type.includes('sheet') || title.endsWith('.xlsx') || title.endsWith('.xls')) return '表格';
-  if (type.includes('doc') || title.endsWith('.doc') || title.endsWith('.docx') || title.endsWith('.pdf') || title.endsWith('.ppt') || title.endsWith('.pptx')) return '文档';
-  if (type.includes('wiki')) return 'Wiki';
-  return '文档';
+  var color = '#3370ff';       // 文档蓝
+  var body = '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" fill="' + color + '" opacity="0.12"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" fill="none" stroke="' + color + '" stroke-width="1.6"/><path d="M14 3v5h5" fill="none" stroke="' + color + '" stroke-width="1.6"/>';
+  if (type.includes('sheet') || type.includes('bitable') || title.endsWith('.xlsx') || title.endsWith('.xls')) {
+    color = '#34c724';         // 表格绿
+    body = '<rect x="4" y="4" width="16" height="16" rx="2" fill="' + color + '" opacity="0.12"/><rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="' + color + '" stroke-width="1.6"/><path d="M4 10h16M4 15h16M10 4v16" stroke="' + color + '" stroke-width="1.4"/>';
+  } else if (type.includes('chat') || type.includes('message') || title.includes('会话')) {
+    color = '#3370ff';         // 会话蓝
+    body = '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2z" fill="' + color + '" opacity="0.12"/><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 4v-4a2 2 0 0 1-1-2z" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
+  }
+  return '<svg width="16" height="16" viewBox="0 0 24 24">' + body + '</svg>';
 }
 
 function renderMarkdown(text) {
