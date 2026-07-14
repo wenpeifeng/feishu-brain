@@ -35,7 +35,8 @@ async function requireAuth(req) {
   let ctx = getSession(token);
   if (!ctx) return null;
 
-  if (Date.now() > ctx.expireAt) {
+  // 提前 5 分钟刷新，避免请求进行中 token 恰好过期（飞书返回 99991677）
+  if (Date.now() > (ctx.expireAt || 0) - 5 * 60 * 1000) {
     try {
       const t = await refreshUserToken(ctx.refreshToken);
       updateTokens(token, t);
@@ -84,7 +85,7 @@ function sanitizedConfig(ctx) {
   const llm = (ctx && ctx.llm) || {};
   const g = getConfig();
   return {
-    providerId: llm.providerId || 'qwen',
+    providerId: llm.providerId || 'glm',
     hasKey: !!llm.apiKey,   // 前端据此显示"已设置/未设置 API Key"
     custom: { baseUrl: llm.baseUrl || '', model: llm.model || '' },
     topK: g.topK,
@@ -97,7 +98,7 @@ function userRagConfig(ctx) {
   const llm = (ctx && ctx.llm) || {};
   const g = getConfig();
   return {
-    providerId: llm.providerId || 'qwen',
+    providerId: llm.providerId || 'glm',
     apiKey: llm.apiKey || '',
     baseUrl: llm.baseUrl || '',
     model: llm.model || '',

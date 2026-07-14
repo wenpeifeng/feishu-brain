@@ -31,12 +31,15 @@ function publicProviders() {
   return PROVIDERS.map(({ id, name, model, baseUrl, hint }) => ({ id, name, model, baseUrl, hint }));
 }
 
-// 内部快速任务（关键词提取）用的快模型：优先 owner 本机的 qwen（env），没有则返回 null，
-// 此时调用方回退用用户自己的 provider。
+// 内部快速任务（关键词提取）用的快模型：从 env 里挑一个可用的快模型（glm-4-air / qwen）。
+// 用 owner 本机 env key 跑关键词，避免占用用户自己的额度、也保证首屏快。无可用 env 则返回 null。
 function resolveFastProvider() {
-  const qwen = PROVIDERS.find(p => p.id === 'qwen');
-  const key = process.env[KEY_ENV.qwen] || '';
-  return (qwen && key) ? { ...qwen, apiKey: key } : null;
+  for (const id of ['glm', 'qwen']) {   // glm-4-air 优先（qwen 账号可能欠费）
+    const key = process.env[KEY_ENV[id]] || '';
+    const p = PROVIDERS.find(x => x.id === id);
+    if (p && key) return { ...p, apiKey: key };
+  }
+  return null;
 }
 
 module.exports = { PROVIDERS, resolveProvider, publicProviders, resolveFastProvider };

@@ -83,25 +83,25 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
 
   // Step 1: 搜索（立刻给"搜索中"反馈）
   yield { type: 'status', text: urlItems.length ? '正在打开你发的文档…' : '正在搜索知识库…' };
-  const kwSource = cleanQ || (urlItems.length ? '' : question);
-  let keywords = '';
-  try { if (kwSource) keywords = await extractKeywords(kwSource, fast); } catch (_e) { keywords = kwSource; }
 
   let searchResults = [];
-  let searchErr = null;
-  try {
-    if (keywords) searchResults = await searchDocs(userAccessToken, keywords, pageSize);
-  } catch (err) { searchErr = err; }
-
-  // 本地知识库（用户上传的补充文档）一起检索
   let kbResults = [];
-  try { if (keywords) kbResults = searchKb(user.openId, keywords); } catch (_e) { kbResults = []; }
+  let searchErr = null;
+  // 粘了文档链接就只总结那篇（不再关键词搜索，避免搜出一堆不相干的）
+  if (!urlItems.length) {
+    let keywords = '';
+    try { keywords = await extractKeywords(question, fast); } catch (_e) { keywords = question; }
+    try {
+      if (keywords) searchResults = await searchDocs(userAccessToken, keywords, pageSize);
+    } catch (err) { searchErr = err; }
+    // 本地知识库（用户上传的补充文档）一起检索
+    try { if (keywords) kbResults = searchKb(user.openId, keywords); } catch (_e) { kbResults = []; }
 
-  // 飞书搜索失败且没有其它来源 → 报错
-  if (searchErr && !urlItems.length && !kbResults.length) {
-    yield { type: 'references', references: [] };
-    yield { type: 'token', delta: '搜索文档失败：' + (searchErr.message || String(searchErr)) };
-    return;
+    if (searchErr && !kbResults.length) {
+      yield { type: 'references', references: [] };
+      yield { type: 'token', delta: '搜索文档失败：' + (searchErr.message || String(searchErr)) };
+      return;
+    }
   }
 
   // 合并：链接文档最前（用户明确指定）→ 本地知识库 → 飞书搜索，按 token 去重
