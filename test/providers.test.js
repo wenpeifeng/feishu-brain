@@ -8,10 +8,11 @@ assert.ok(PROVIDERS.find(p => p.id === 'kimi'), 'has kimi');
 assert.ok(PROVIDERS.find(p => p.id === 'agnes'), 'has agnes');
 assert.ok(!PROVIDERS.find(p => p.id === 'qwen'), 'qwen 已移除');
 
-// resolveProvider 带出 key（从 env）
-const r = resolveProvider({ providerId: 'glm' });
+// resolveProvider 带出 model/baseUrl；apiKey 只来自 config（无 env 兜底）
+const r = resolveProvider({ providerId: 'glm', apiKey: 'my-key' });
 assert.equal(r.model, 'glm-4-air');
-assert.ok(r.apiKey && r.apiKey.length > 10, 'glm apiKey from env');
+assert.equal(r.apiKey, 'my-key', 'apiKey 来自 config');
+assert.equal(resolveProvider({ providerId: 'glm' }).apiKey, '', '未填 key 时为空(无隐藏兜底)');
 
 // 默认回退到第一个
 assert.equal(resolveProvider({}).id, 'glm');

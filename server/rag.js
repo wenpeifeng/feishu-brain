@@ -19,7 +19,7 @@
 
 const { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls, findAnchorBlock } = require('./feishu');
 const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
-const { resolveProvider, resolveFastProvider } = require('./providers');
+const { resolveProvider } = require('./providers');
 const { searchKb } = require('./kb');
 
 /**
@@ -42,17 +42,24 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   const topK     = config.topK     || 3;
   const provider = resolveProvider(config);
 
+  // 没填 API Key 就直接提示，不做无谓检索（每人必须填自己的 key）
+  if (!provider.apiKey) {
+    yield { type: 'references', references: [] };
+    yield { type: 'token', delta: '⚠️ 还没设置 API Key。点右上角头像旁的「设置」，选模型厂商并填入你自己的 API Key（仅本次登录有效）。' };
+    return;
+  }
+
   // ── webSearch=true 分支：联网问答 ──────────────────────────────────────────
   if (webSearch) {
-    // 并行搜索（try/catch 防止 502 等网络错误）
+    // 联网问答：先并行搜一遍飞书文档做参考，再让模型带 web_search 作答
     let results = [];
     try {
-      results = await searchAndEnrich(userAccessToken, question, provider, pageSize);
+      const kw = await extractKeywords(question, provider).catch(() => question);
+      results = await searchDocs(userAccessToken, kw, pageSize);
+      results = await enrichReferences(userAccessToken, results).catch(() => results);
     } catch (_err) {
       results = [];
     }
-
-    yield { type: 'references', references: results };
 
     try {
       for await (const chunk of askLLMGeneral(question, history, provider, true)) {
@@ -68,15 +75,13 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
       }
     }
 
-    const sources = results.map(r => ({ title: r.title, url: r.url }));
-    yield { type: 'sources', sources };
+    yield { type: 'references', references: results };
+    yield { type: 'sources', sources: results.map(r => ({ title: r.title, url: r.url })) };
     return;
   }
 
   // ── webSearch=false 分支：知识库问答 ──────────────────────────────────────
-  // 用状态事件给用户即时反馈（业界做法：不让用户对着空白等），并把慢步骤挪出首屏关键路径。
-  const fast = resolveFastProvider() || provider;   // 关键词用快模型，避免慢推理拖首屏
-
+  // 关键词提取用用户自己的模型（无隐藏内置 key）。glm-4-air 本身就快。
   // Step 0: 若消息里粘了飞书文档链接，直接定位这几篇（"帮我总结这篇文档"场景）
   const urlItems = parseFeishuDocUrls(question);
   const cleanQ = question.replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -90,7 +95,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   let keywords = '';   // 供搜索 + 后续深链定位块用
   // 粘了文档链接就只总结那篇（不再关键词搜索，避免搜出一堆不相干的）
   if (!urlItems.length) {
-    try { keywords = await extractKeywords(question, fast); } catch (_e) { keywords = question; }
+    try { keywords = await extractKeywords(question, provider); } catch (_e) { keywords = question; }
     try {
       if (keywords) searchResults = await searchDocs(userAccessToken, keywords, pageSize);
     } catch (err) { searchErr = err; }
