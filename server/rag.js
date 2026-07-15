@@ -148,18 +148,16 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   );
 
   // 深链定位：为读到正文的 docx 文档，找到与问题最匹配的块，构造 `文档URL#block_id` 深链
-  // （飞书官方锚点格式，来自 lark-cli 文档），点参考资料就跳到最相关那一段。失败静默降级。
+  // （飞书官方锚点格式，来自 lark-cli 文档）。**并行**进行、和下面的答案生成重叠，不加延迟。
   const anchorKw = keywords || question;
-  const anchorByToken = new Map();
-  await Promise.all(docs.filter(d => d.docId && d.content && d.url).map(async d => {
+  const anchorP = Promise.all(docs.filter(d => d.docId && d.content && d.url).map(async d => {
     try {
       const blockId = await findAnchorBlock(userAccessToken, d.docId, anchorKw);
-      if (blockId) {
-        const origin = new URL(d.url).origin;
-        anchorByToken.set(d.token, `${origin}/docx/${d.docId}#${blockId}`);
-      }
-    } catch (_e) { /* 定位失败就用原链接 */ }
-  }));
+      if (!blockId) return null;
+      const origin = new URL(d.url).origin;
+      return [d.token, `${origin}/docx/${d.docId}#${blockId}`];
+    } catch (_e) { return null; }
+  })).then(pairs => new Map(pairs.filter(Boolean)));
 
   // Step 3: 流式生成回答（首个 reasoning/token 一到，前端状态即切换）
   try {
@@ -180,6 +178,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   // 链接文档的标题在 fetchDoc 后才有，回填到参考资料里
   // docx 正文首行通常就是标题，用它兜底链接文档的标题
   const titleByToken = new Map(docs.map(d => [d.token, d.title || (d.content || '').split('\n')[0].trim().slice(0, 60)]));
+  const anchorByToken = await anchorP;   // 此时锚点已和答案生成并行算完
   const enriched = (await enrichP).map(r => ({
     ...r,
     title: r.title || titleByToken.get(r.token) || '飞书文档',
