@@ -147,8 +147,8 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
     })
   );
 
-  // 深链定位：为读到正文的 docx 文档，找到与问题最匹配的块，构造 ?block_id= 深链，
-  // 点参考资料就能跳到文档里最相关的那一段（像飞书自家知识问答）。并行、失败静默降级。
+  // 深链定位：为读到正文的 docx 文档，找到与问题最匹配的块，构造 `文档URL#block_id` 深链
+  // （飞书官方锚点格式，来自 lark-cli 文档），点参考资料就跳到最相关那一段。失败静默降级。
   const anchorKw = keywords || question;
   const anchorByToken = new Map();
   await Promise.all(docs.filter(d => d.docId && d.content && d.url).map(async d => {
@@ -156,7 +156,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
       const blockId = await findAnchorBlock(userAccessToken, d.docId, anchorKw);
       if (blockId) {
         const origin = new URL(d.url).origin;
-        anchorByToken.set(d.token, `${origin}/docx/${d.docId}?block_id=${blockId}`);
+        anchorByToken.set(d.token, `${origin}/docx/${d.docId}#${blockId}`);
       }
     } catch (_e) { /* 定位失败就用原链接 */ }
   }));
