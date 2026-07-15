@@ -103,25 +103,9 @@ async function searchDocs(userAccessToken, query, pageSize = 9) {
 
   // 相关性重排：标题命中的关键词越多越靠前（"澳洲 迁移" 里两个词都在标题 > 只命中一个）。
   // 这样最相关的文档排前面，也正是喂给 AI 读全文的那几篇。
-  const kws = String(query || '').split(/\s+/).filter(Boolean);
-  const scoreOf = (t) => kws.reduce((s, k) => s + ((t && t.includes(k)) ? 1 : 0), 0);
-  merged.forEach(r => { r._score = scoreOf(r.title); });
-  merged.sort((a, b) => b._score - a._score);   // V8 稳定排序，同分保持原序（wiki 优先）
-
-  // 相关性阈值过滤：只保留"足够相关"的，宁缺毋滥（用户不想看一堆不相干文档）
-  //   - 有强相关(标题命中≥2关键词)时：只留命中≥2的
-  //   - 只有单命中时：留命中≥1的
-  //   - 标题都没命中(命中在正文)：全留（避免全空）
-  const maxScore = merged.reduce((m, r) => Math.max(m, r._score), 0);
-  let filtered;
-  if (maxScore >= 2) filtered = merged.filter(r => r._score >= 2);
-  else if (maxScore === 1) filtered = merged.filter(r => r._score >= 1);
-  else filtered = merged;
-
-  return filtered.slice(0, pageSize).map((r, i) => {
-    const { _score, ...rest } = r;
-    return { ...rest, index: i + 1 };
-  });
+  // 不再按标题关键词硬过滤——飞书搜索本身已按"内容相关性"排序，标题不含关键词但正文
+  // 命中的文档（如《电力交易常用Q&A》里有答案）也要保留。直接信任飞书排序，取前 pageSize。
+  return merged.slice(0, pageSize).map((r, i) => ({ ...r, index: i + 1 }));
 }
 
 /** unix 秒(字符串/数字) → YYYY-MM-DD；无效返回 '' */

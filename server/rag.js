@@ -121,9 +121,15 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   // 作者/日期富化：并行进行，不阻塞后续阅读与生成（参考资料在最后才展示）
   const enrichP = enrichReferences(userAccessToken, results).catch(() => results);
 
-  // Step 2: 读取正文（给"阅读中"反馈）；至少读完用户粘的链接文档 + topK 篇
+  // Step 2: 读取正文（给"阅读中"反馈）。优先读能读到正文的类型（docx/wiki/本地KB），
+  // 把 mp4/pptx/pdf/sheet 这些读不到正文的排后面，保证 AI 拿到真正的内容。
   yield { type: 'status', text: '正在阅读相关文档…' };
-  const topItems = results.slice(0, Math.max(topK, urlItems.length));
+  const READABLE = new Set(['docx', 'wiki', 'doc']);
+  const readableFirst = [
+    ...results.filter(r => r.source === 'kb' || READABLE.has(r.type)),
+    ...results.filter(r => r.source !== 'kb' && !READABLE.has(r.type)),
+  ];
+  const topItems = readableFirst.slice(0, Math.max(topK, urlItems.length));
   const docs = await Promise.all(
     topItems.map(item => {
       // 本地知识库文档已带正文，无需再拉取
