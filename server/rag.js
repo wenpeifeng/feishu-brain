@@ -17,7 +17,7 @@
  * 不 log token 或 apiKey。
  */
 
-const { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls } = require('./feishu');
+const { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls, findAnchorBlock } = require('./feishu');
 const { askLLMStream, askLLMGeneral, extractKeywords } = require('./llm');
 const { resolveProvider, resolveFastProvider } = require('./providers');
 const { searchKb } = require('./kb');
@@ -87,9 +87,9 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   let searchResults = [];
   let kbResults = [];
   let searchErr = null;
+  let keywords = '';   // 供搜索 + 后续深链定位块用
   // 粘了文档链接就只总结那篇（不再关键词搜索，避免搜出一堆不相干的）
   if (!urlItems.length) {
-    let keywords = '';
     try { keywords = await extractKeywords(question, fast); } catch (_e) { keywords = question; }
     try {
       if (keywords) searchResults = await searchDocs(userAccessToken, keywords, pageSize);
@@ -137,10 +137,24 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
         return Promise.resolve({ ...item, content: item.content || '' });
       }
       return fetchDoc(userAccessToken, item)
-        .then(d => ({ ...item, title: d.title || item.title, content: d.content || '' }))
+        .then(d => ({ ...item, title: d.title || item.title, content: d.content || '', docId: d.docId || '' }))
         .catch(() => ({ ...item, content: '' }));
     })
   );
+
+  // 深链定位：为读到正文的 docx 文档，找到与问题最匹配的块，构造 ?block_id= 深链，
+  // 点参考资料就能跳到文档里最相关的那一段（像飞书自家知识问答）。并行、失败静默降级。
+  const anchorKw = keywords || question;
+  const anchorByToken = new Map();
+  await Promise.all(docs.filter(d => d.docId && d.content && d.url).map(async d => {
+    try {
+      const blockId = await findAnchorBlock(userAccessToken, d.docId, anchorKw);
+      if (blockId) {
+        const origin = new URL(d.url).origin;
+        anchorByToken.set(d.token, `${origin}/docx/${d.docId}?block_id=${blockId}`);
+      }
+    } catch (_e) { /* 定位失败就用原链接 */ }
+  }));
 
   // Step 3: 流式生成回答（首个 reasoning/token 一到，前端状态即切换）
   try {
@@ -164,6 +178,7 @@ async function* runRAGStream(user, question, history = [], webSearch = false, co
   const enriched = (await enrichP).map(r => ({
     ...r,
     title: r.title || titleByToken.get(r.token) || '飞书文档',
+    url: anchorByToken.get(r.token) || r.url,   // 有定位块就用深链，否则原链接
   }));
   yield { type: 'references', references: enriched };
   yield { type: 'sources', sources: docs.filter(d => d.content).map(d => ({ title: d.title, url: d.url })) };

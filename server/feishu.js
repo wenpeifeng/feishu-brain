@@ -187,7 +187,8 @@ async function fetchDoc(userAccessToken, item) {
 
   try {
     if (type === 'docx') {
-      return { title, content: await fetchDocxContent(userAccessToken, token) };
+      // docId = docx document_id（= token），供后续深链定位到具体块
+      return { title, content: await fetchDocxContent(userAccessToken, token), docId: token };
     }
 
     // type === 'wiki'：先拿 obj_token / obj_type
@@ -203,11 +204,49 @@ async function fetchDoc(userAccessToken, item) {
     if (obj_type !== 'docx') {
       return { title, content: '' };
     }
-    return { title, content: await fetchDocxContent(userAccessToken, obj_token) };
+    return { title, content: await fetchDocxContent(userAccessToken, obj_token), docId: obj_token };
 
   } catch (_err) {
     // 任何读取失败都降级为空内容，不让整个流程崩溃
     return { title, content: '' };
+  }
+}
+
+/** 提取一个 block 的纯文本（text/heading/bullet/ordered 等都在 elements[].text_run.content） */
+function blockText(b) {
+  const fields = ['text', 'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'heading7', 'heading8', 'heading9', 'bullet', 'ordered', 'quote', 'todo', 'code'];
+  for (const f of fields) {
+    const el = b[f] && b[f].elements;
+    if (Array.isArray(el)) {
+      return el.map(e => (e.text_run && e.text_run.content) || '').join('');
+    }
+  }
+  return '';
+}
+
+/**
+ * 在 docx 文档块里找到与关键词最匹配的块，返回其 block_id（用于深链定位）。
+ * 找不到返回 ''。任何失败都静默降级。
+ */
+async function findAnchorBlock(userAccessToken, docId, keywords) {
+  const kws = String(keywords || '').split(/\s+/).filter(Boolean);
+  if (!docId || !kws.length) return '';
+  try {
+    const res = await fetch(`${BASE}/docx/v1/documents/${encodeURIComponent(docId)}/blocks?page_size=500`, {
+      headers: { 'Authorization': `Bearer ${userAccessToken}` },
+    });
+    const j = await res.json();
+    if (j.code !== 0) return '';
+    let best = '', bestScore = 0;
+    for (const b of (j.data?.items || [])) {
+      const t = blockText(b);
+      if (!t) continue;
+      const score = kws.reduce((s, k) => s + (t.includes(k) ? 1 : 0), 0);
+      if (score > bestScore) { bestScore = score; best = b.block_id; }
+    }
+    return bestScore > 0 ? best : '';
+  } catch (_e) {
+    return '';
   }
 }
 
@@ -241,4 +280,4 @@ function parseFeishuDocUrls(text) {
   return out;
 }
 
-module.exports = { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls };
+module.exports = { searchDocs, fetchDoc, enrichReferences, parseFeishuDocUrls, findAnchorBlock };
