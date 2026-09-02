@@ -4,6 +4,11 @@ const path = require('path');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const CONVERSATIONS_FILE = path.join(DATA_DIR, 'conversations.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const CONFIG_KEYS = new Set([
+  'topK', 'adaptiveEvidence', 'evidenceMin', 'evidenceMax', 'evidenceScoreGap',
+  'retrievalPreset', 'pageSize', 'readPool', 'minScore', 'judgeMin', 'adversarial',
+  'chatSearch', 'chatSize', 'chatAfter', 'chatBefore',
+]);
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -28,17 +33,28 @@ function writeJSON(filePath, data) {
 
 function getDefaultConfig() {
   return {
-    appId: process.env.FEISHU_APP_ID || '',
-    appSecret: process.env.FEISHU_APP_SECRET || '',
-    larkCliPath: process.env.LARK_CLI_PATH || 'lark-cli',
-    larkIdentity: process.env.LARK_IDENTITY || 'user',
-    openaiApiKey: process.env.OPENAI_API_KEY || '',
-    openaiBaseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    llmProvider: process.env.LLM_PROVIDER || 'openai',
-    llmModel: process.env.LLM_MODEL || 'gpt-4o-mini',
-    topK: 3,
-    pageSize: 10,
+    topK: 3,          // 关闭自适应时使用的固定证据数
+    adaptiveEvidence: true,
+    evidenceMin: 2,  // 自适应证据集最少保留数（有足够通过项时）
+    evidenceMax: 5,  // 自适应证据集上限，避免固定 3 条截断同档证据
+    evidenceScoreGap: 0.15, // 同一法官档内，相对最佳向量分的允许落差
+    retrievalPreset: 'baseline-v1', // 初始安全基线；积累人工金标后由离线评测升级版本
+    pageSize: 10,      // 召回数量：飞书搜索返回多少篇候选
+    readPool: 12,      // 读取上限：读正文参与向量打分的候选数（安全上限，非质量闸；谁入选由 minScore 阈值决定）
+    minScore: 0.40,    // 相关度阈值：向量余弦低于此值的段落丢弃（0~1，越高越严）
+    judgeMin: 2,       // 法官入选阈值：LLM 判官打分（0~3）≥此值才入选（越高越严）
+    adversarial: false, // 实验性复核：现有弱金标显示会伤召回且增加尾延迟，默认关闭，保留开关供评测
+    chatSearch: true,  // 会话检索开关：是否检索聊天记录
+    chatSize: 6,       // 会话召回数：搜索命中多少条消息
+    chatAfter: 3,      // 会话向后拉取：命中消息后补几条回复（聊天是一问一答，答常在后面）
+    chatBefore: 0,     // 会话向前拉取：命中消息前补几条（应对"命中的是答案、问题在前面"）
   };
+}
+
+function sanitizePersistentConfig(value) {
+  const clean = {};
+  for (const [key, item] of Object.entries(value || {})) if (CONFIG_KEYS.has(key)) clean[key] = item;
+  return clean;
 }
 
 let configCache = null;
@@ -46,14 +62,17 @@ let conversationsCache = null;
 
 function getConfig() {
   if (configCache) return configCache;
-  const fileConfig = readJSON(CONFIG_FILE, {});
+  const raw = readJSON(CONFIG_FILE, {});
+  const fileConfig = sanitizePersistentConfig(raw);
+  // 一次性迁移旧配置：历史版本曾把应用密钥/模型密钥写入这里。只保留公开的检索默认值。
+  if (Object.keys(raw).some(key => !CONFIG_KEYS.has(key))) writeJSON(CONFIG_FILE, fileConfig);
   configCache = { ...getDefaultConfig(), ...fileConfig };
   return configCache;
 }
 
 function updateConfig(newConfig) {
-  configCache = { ...getConfig(), ...newConfig };
-  writeJSON(CONFIG_FILE, configCache);
+  configCache = { ...getConfig(), ...sanitizePersistentConfig(newConfig) };
+  writeJSON(CONFIG_FILE, sanitizePersistentConfig(configCache));
   return configCache;
 }
 
@@ -158,4 +177,5 @@ module.exports = {
   deleteConversationOwned,
   addMessage,
   updateConversationTitleOwned,
+  sanitizePersistentConfig,
 };

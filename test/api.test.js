@@ -2,6 +2,17 @@
 process.env.USE_MOCK = 'true';
 
 const { handleRequest } = require('../server/router');
+const { createSession, removeSession } = require('../server/session');
+const { deleteConversationOwned } = require('../server/store');
+
+const TEST_OPEN_ID = 'mock-api-user-' + process.pid;
+const TEST_TOKEN = createSession({
+  openId: TEST_OPEN_ID,
+  name: 'Mock API User',
+  userAccessToken: 'mock-user-access-token',
+  refreshToken: 'mock-refresh-token',
+  expireAt: Date.now() + 60 * 60 * 1000,
+});
 
 function makeRequest(method, pathname, body) {
   return new Promise((resolve) => {
@@ -9,7 +20,7 @@ function makeRequest(method, pathname, body) {
     const req = {
       method,
       url: pathname,
-      headers: { host: 'localhost' },
+      headers: { host: 'localhost', authorization: `Bearer ${TEST_TOKEN}` },
       on: (event, cb) => {
         if (event === 'data' && chunks.length) {
           chunks.forEach(c => cb(c));
@@ -21,6 +32,7 @@ function makeRequest(method, pathname, body) {
     const res = {
       status: 200,
       headers: {},
+      raw: '',
       writeHead: (status, headers) => {
         res.status = status;
         Object.assign(res.headers, headers);
@@ -28,8 +40,13 @@ function makeRequest(method, pathname, body) {
       setHeader: (key, value) => {
         res.headers[key] = value;
       },
+      write: (data) => {
+        res.raw += data ? String(data) : '';
+      },
       end: (data) => {
-        res.body = data ? JSON.parse(data) : null;
+        res.raw += data ? String(data) : '';
+        try { res.body = res.raw ? JSON.parse(res.raw) : null; }
+        catch (_e) { res.body = res.raw; }
         resolve(res);
       },
     };
@@ -55,9 +72,7 @@ async function run() {
   await check('GET /api/config', async () => {
     const res = await makeRequest('GET', '/api/config');
     if (res.status !== 200) throw new Error(`status ${res.status}`);
-    if (!res.body.config || res.body.config.larkCliPath !== 'lark-cli') {
-      throw new Error('unexpected config');
-    }
+    if (!res.body.config || res.body.config.apiKey !== '') throw new Error('unexpected or unsafe config');
   });
 
   let convId;
@@ -89,13 +104,7 @@ async function run() {
   await check('POST /api/conversations/:id/ask', async () => {
     const res = await makeRequest('POST', `/api/conversations/${convId}/ask`, { question: '清分单是什么' });
     if (res.status !== 200) throw new Error(`status ${res.status}`);
-    if (!res.body.answer || !res.body.mock) throw new Error('no mock answer');
-    if (!res.body.references || res.body.references.length === 0) {
-      throw new Error('no references');
-    }
-    if (!res.body.sources || res.body.sources.length === 0) {
-      throw new Error('no sources');
-    }
+    if (typeof res.body !== 'string' || !res.body.includes('event: references') || !res.body.includes('event: done')) throw new Error('invalid SSE answer');
   });
 
   await check('GET /api/conversations/:id after ask', async () => {
@@ -106,11 +115,14 @@ async function run() {
     }
   });
 
+  if (convId) deleteConversationOwned(convId, TEST_OPEN_ID);
+  removeSession(TEST_TOKEN);
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
 
 run().catch((err) => {
+  removeSession(TEST_TOKEN);
   console.error(err);
   process.exit(1);
 });

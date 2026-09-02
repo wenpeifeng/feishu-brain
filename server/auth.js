@@ -78,9 +78,35 @@ function verifyState(state) {
  */
 // 需要向用户申请的 scope。飞书 OAuth 只授予 authorize URL 里显式请求的 user scope，
 // 应用后台"开通"某权限 ≠ 用户 token 自动拥有——必须在此请求，用户同意后 token 才带上。
-// 只请求应用确实已开通的 scope。contact:user.base:readonly（作者姓名用）该应用未开通，
-// 请求它会导致 authorize 报 20027 阻断登录，故移除；作者姓名为可选增强，enrich 时优雅跳过。
-const DEFAULT_SCOPES = 'search:docs:read wiki:wiki:readonly docx:document:readonly wiki:node:read drive:drive.metadata:readonly offline_access';
+// ⚠️ 只能请求应用后台**已开通**的 scope；请求未开通的会 20027 阻断整个登录。
+// 2026-07-15 用户已在控制台开通以下 user scope（sheets/bitable/老doc/人名/群聊消息检索），
+// 加入授权列表后需用户**重新登录**才会写进新 token。
+// ⚠️ 名字必须与控制台「已开通」的 scope 一字不差，否则 authorize 会 20027 阻断登录。
+// 下列均为已从控制台截图/接口报错**确认过确切名字**的：
+const DEFAULT_SCOPES = [
+  // 已有（一直生效）
+  'search:docs:read', 'wiki:wiki:readonly', 'docx:document:readonly',
+  'wiki:node:read', 'drive:drive.metadata:readonly',
+  // 已确认开通（2026-07-15 截图确认确切名字）
+  'sheets:spreadsheet:read', 'sheets:spreadsheet.meta:read', 'contact:user.base:readonly',
+  'offline_access',
+  // 导出到飞书文档（2026-07-16 截图确认：docx:document / docx:document:create 用户身份已开通）
+  'docx:document', 'docx:document:create',
+  // 会话/聊天记录检索（2026-07-16 截图确认：search:message / im:message:readonly 用户身份已开通）
+  'search:message', 'im:message:readonly',
+  // 读取单聊/群消息正文（2026-07-16 截图确认：im:message.p2p_msg:get_as_user 用户身份已开通）
+  'im:message.p2p_msg:get_as_user',
+  // 列出用户所在的群（分享至会话的选择器用；用户身份已开通，之前 token 没请求过导致 99991679）
+  'im:chat:readonly',
+  // 「一键以我的名义转发」：官方发消息接口(im/v1/messages)以 user_access_token 发时，鉴权主权限是
+  // im:message（获取与发送单聊、群组消息，用户身份），配套 im:message.send_as_user 让发出者显示为本人。
+  // 2026-07-17 后台截图确认两者"用户身份·已开通"；im:message 之前没请求导致 99991679 只认 im:message。
+  'im:message', 'im:message.send_as_user',
+  // 参考资料作者姓名/头像（2026-07-16 用户开通：contact 批量查名要 contact:contact.base:readonly，实测 99991679 点名要它）
+  // 注：im:message:send_as_bot 是「应用身份」权限，用 app_access_token 主动发消息，无需放进用户授权 scope（放了会 20027）。
+  'contact:contact.base:readonly',
+].join(' ');
+// 待确认确切名字后再加入（避免写错触发 20027）：老doc / 多维表格 / drive:drive / 群聊消息检索(search:message + im:*)
 
 function buildAuthorizeUrl(state) {
   const u = new URL(FEISHU + '/open-apis/authen/v1/authorize');
@@ -152,9 +178,14 @@ async function exchangeCode(code) {
     openId: d.open_id,
     name: d.name,
     avatar: d.avatar_url,
+    // 飞书在可用时返回 tenant_key；没有时由组织层使用部署级
+    // FEISHU_TENANT_KEY（单租户自建应用）安全兜底。
+    tenantKey: d.tenant_key || '',
+    tenantName: d.tenant_name || '',
     userAccessToken: d.access_token,
     refreshToken: d.refresh_token,
     expireAt: Date.now() + (d.expires_in || 7200) * 1000,
+    grantedScope: d.scope || '',   // 飞书实际授予的 scope，用于排查"开了却没生效"
   };
 }
 

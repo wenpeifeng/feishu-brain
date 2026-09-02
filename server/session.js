@@ -47,9 +47,12 @@ function createSession(user) {
     openId: user.openId,
     name: user.name,
     avatar: user.avatar || '',
+    tenantKey: user.tenantKey || '',
+    tenantName: user.tenantName || '',
     userAccessToken: user.userAccessToken,
     refreshToken: user.refreshToken,
     expireAt: user.expireAt,
+    grantedScope: user.grantedScope || '',   // 飞书实际授予的 scope（排查用）
   };
   sessions.set(token, ctx);
   saveToDisk();
@@ -63,6 +66,39 @@ function createSession(user) {
  */
 function getSession(token) {
   return sessions.get(token) || null;
+}
+
+/**
+ * 按 openId 找该用户最新的有效登录态（机器人按发消息人 openId 复用其网页登录的权限）。
+ * @param {string} openId
+ * @returns {object|null}
+ */
+function getSessionByOpenId(openId) {
+  if (!openId) return null;
+  let best = null;
+  for (const ctx of sessions.values()) {
+    if (ctx.openId === openId && (ctx.expireAt || 0) > Date.now()) {
+      if (!best || (ctx.expireAt || 0) > (best.expireAt || 0)) best = ctx;
+    }
+  }
+  return best;
+}
+
+/**
+ * 找该用户的会话，忽略过期（定时任务在 access_token 过期后仍需拿 refresh_token 续期）。
+ * 优先返回 refresh_token 最新（expireAt 最大）的那个。
+ * @param {string} openId
+ * @returns {object | null}
+ */
+function getSessionByOpenIdAny(openId) {
+  if (!openId) return null;
+  let best = null;
+  for (const ctx of sessions.values()) {
+    if (ctx.openId === openId && ctx.refreshToken) {
+      if (!best || (ctx.expireAt || 0) > (best.expireAt || 0)) best = ctx;
+    }
+  }
+  return best;
 }
 
 /**
@@ -97,6 +133,15 @@ function setLlmConfig(token, llm) {
   return ctx.llm;
 }
 
+/** 保存该用户自己的检索调试参数；与登录态隔离，不修改系统默认值。 */
+function setRagConfig(token, rag) {
+  const ctx = sessions.get(token);
+  if (!ctx) return null;
+  ctx.rag = { ...(ctx.rag || {}), ...(rag || {}) };
+  saveToDisk();
+  return ctx.rag;
+}
+
 /**
  * Remove a session.
  * @param {string} token
@@ -106,4 +151,4 @@ function removeSession(token) {
   saveToDisk();
 }
 
-module.exports = { createSession, getSession, updateTokens, setLlmConfig, removeSession };
+module.exports = { createSession, getSession, getSessionByOpenId, getSessionByOpenIdAny, updateTokens, setLlmConfig, setRagConfig, removeSession };

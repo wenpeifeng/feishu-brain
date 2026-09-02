@@ -3,129 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>飞书知识问答 - 登录</title>
+  <title>飞书知识问答 · 登录</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
   <style>
+    :root { --primary:#7c5cff; --primary-050:#f4f1ff; --text:#1f2329; --sub:#646a73; --muted:#8f959e; --border:#edeef1; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      background:
+        radial-gradient(900px 460px at 78% -10%, rgba(124,92,255,.10), transparent 60%),
+        radial-gradient(760px 420px at 12% 108%, rgba(245,166,35,.08), transparent 58%),
+        #f7f8fa;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+      color: var(--text); -webkit-font-smoothing: antialiased;
     }
     .login-card {
-      background: #1e2433;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 48px 40px;
-      width: 380px;
-      max-width: 90vw;
-      text-align: center;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+      background: #fff; border: 1px solid var(--border); border-radius: 22px;
+      padding: 46px 44px 34px; width: 400px; max-width: 92vw; text-align: center;
+      box-shadow: 0 24px 64px rgba(20,26,51,.10); animation: cardIn .5s cubic-bezier(.2,.8,.2,1) both;
     }
-    .login-logo {
-      width: 56px;
-      height: 56px;
-      background: #3370ff;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 24px;
+    @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .ring {
+      width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 22px;
+      background: conic-gradient(from 210deg, #7c5cff, #9d6cff, #f5a623, #7c5cff);
+      -webkit-mask: radial-gradient(circle, transparent 42%, #000 43%); mask: radial-gradient(circle, transparent 42%, #000 43%);
+      box-shadow: 0 8px 30px rgba(124,92,255,.22); animation: spin 14s linear infinite;
     }
-    .login-logo svg {
-      width: 32px;
-      height: 32px;
-      color: white;
-    }
-    .login-title {
-      font-size: 22px;
-      font-weight: 600;
-      color: #ffffff;
-      margin-bottom: 8px;
-      letter-spacing: 0.5px;
-    }
-    .login-subtitle {
-      font-size: 14px;
-      color: rgba(255, 255, 255, 0.45);
-      margin-bottom: 36px;
-      line-height: 1.6;
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .title { font-family: "Space Grotesk", -apple-system, "PingFang SC", sans-serif; font-size: 25px; font-weight: 700; letter-spacing: -.01em; display: inline-flex; align-items: center; gap: 10px; }
+    .badge { font-family: inherit; font-size: 12px; font-weight: 600; color: var(--primary); background: var(--primary-050); padding: 3px 9px; border-radius: 8px; letter-spacing: 0; }
+    .subtitle { font-size: 14px; color: var(--sub); margin: 10px auto 30px; line-height: 1.7; max-width: 300px; }
+    .subtitle b { color: var(--text); font-weight: 600; }
     .login-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      padding: 13px 24px;
-      background: #3370ff;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
-      font-family: inherit;
-      letter-spacing: 0.3px;
+      display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+      padding: 14px 24px; border: none; border-radius: 14px; color: #fff; font-size: 15.5px; font-weight: 600;
+      cursor: pointer; font-family: inherit; letter-spacing: .3px;
+      background: linear-gradient(135deg,#7c5cff 0%,#9a6bff 55%,#f5a623 135%);
+      box-shadow: 0 8px 22px rgba(124,92,255,.32); transition: transform .15s, box-shadow .15s, filter .15s;
     }
-    .login-btn:hover {
-      background: #245bdb;
-    }
-    .login-btn:active {
-      transform: scale(0.98);
-    }
-    .login-btn:disabled {
-      background: #2a3a5e;
-      color: rgba(255, 255, 255, 0.4);
-      cursor: not-allowed;
-      transform: none;
-    }
-    .login-btn svg {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-    }
-    .login-footer {
-      margin-top: 28px;
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.25);
-      line-height: 1.6;
-    }
-    .error-msg {
-      margin-top: 16px;
-      padding: 10px 14px;
-      background: rgba(245, 74, 69, 0.12);
-      border: 1px solid rgba(245, 74, 69, 0.25);
-      border-radius: 8px;
-      color: #f54a45;
-      font-size: 13px;
-      display: none;
-    }
+    .login-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(124,92,255,.4); filter: brightness(1.03); }
+    .login-btn:active { transform: translateY(0) scale(.99); }
+    .login-btn:disabled { background: #d3d9e6; box-shadow: none; cursor: not-allowed; transform: none; filter: none; }
+    .login-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .btn-note { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+    .steps { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 22px 0 0; }
+    .step { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sub); }
+    .step .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--primary-050); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+    .step-arrow { color: #c1c6cf; }
+    .login-footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.6; display: inline-flex; align-items: center; gap: 6px; }
+    .login-footer svg { color: #35c15f; flex-shrink: 0; }
+    .error-msg { margin-top: 16px; padding: 10px 14px; background: #fff2f0; border: 1px solid #ffd9d6; border-radius: 10px; color: #f54a45; font-size: 13px; display: none; }
     .error-msg.show { display: block; }
+    @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
   </style>
 </head>
 <body>
   <div class="login-card">
-    <div class="login-logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-      </svg>
-    </div>
-    <div class="login-title">飞书知识问答</div>
-    <div class="login-subtitle">基于飞书知识库的问答助手</div>
+    <div class="ring"></div>
+    <div class="title">飞书知识问答 <span class="badge">内部专享</span></div>
+    <div class="subtitle">整合你有权限的飞书文档与知识库，<b>检索 · 甄别 · 带来源</b>地回答你</div>
     <button class="login-btn" id="loginBtn" onclick="handleLogin()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-        <polyline points="10 17 15 12 10 7"/>
-        <line x1="15" y1="12" x2="3" y2="12"/>
-      </svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
       使用飞书登录
     </button>
+    <div class="btn-note">一步完成登录与授权，无需二次操作</div>
+    <div class="steps">
+      <span class="step"><span class="dot">1</span>飞书登录</span>
+      <span class="step-arrow">→</span>
+      <span class="step"><span class="dot">2</span>授权访问</span>
+      <span class="step-arrow">→</span>
+      <span class="step"><span class="dot">3</span>进入问答</span>
+    </div>
     <div class="error-msg" id="errorMsg"></div>
-    <div class="login-footer">登录即代表你同意使用飞书身份访问你的知识库</div>
+    <div class="login-footer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 9.5C8 22.3 5 18.4 5 14V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      按你的飞书权限访问资料，数据仅你可见
+    </div>
   </div>
 
   <script>
@@ -133,7 +87,7 @@
       const btn = document.getElementById('loginBtn');
       const errEl = document.getElementById('errorMsg');
       btn.disabled = true;
-      btn.textContent = '正在跳转...';
+      btn.textContent = '正在跳转…';
       errEl.classList.remove('show');
       try {
         const redirect = encodeURIComponent(window.location.pathname && window.location.pathname !== '/login.html' ? window.location.pathname : '/');

@@ -1,7 +1,7 @@
 // test/feishu.test.js — TDD for server/feishu.js
 // Stubs global.fetch; asserts user token, parsing, content fetch, error catch.
 
-const { searchDocs, fetchDoc } = require('../server/feishu');
+const { searchDocs, fetchDoc, searchMessages } = require('../server/feishu');
 
 const USER_TOKEN = 'THE_USER_TOKEN';
 
@@ -196,6 +196,38 @@ async function run() {
 
     if (result.title !== '出错文档') throw new Error(`title: ${result.title}`);
     if (result.content !== '') throw new Error(`expected content='', got "${result.content}"`);
+  });
+
+  // ── Test 9: 会话候选保留结构化“命中消息 + 后续回复” ────────────────────────
+  await check('searchMessages 结构化保留命中问句与后续回答', async () => {
+    const matchMs = 1_700_000_000_000;
+    global.fetch = async (url) => {
+      if (url.includes('/search/v2/message')) {
+        return { ok: true, json: async () => ({ code: 0, data: { items: ['m1'] } }) };
+      }
+      if (url.includes('/im/v1/messages/m1')) {
+        return { ok: true, json: async () => ({ code: 0, data: { items: [{
+          message_id: 'm1', chat_id: 'c1', msg_type: 'text', create_time: String(matchMs), message_position: 7,
+          sender: { sender_type: 'user', id: 'u1' }, body: { content: JSON.stringify({ text: '最近澳储油需求吗？' }) },
+        }] } }) };
+      }
+      if (url.includes('container_id=c1')) {
+        return { ok: true, json: async () => ({ code: 0, data: { items: [
+          { message_id: 'm1', msg_type: 'text', create_time: String(matchMs), sender: { sender_type: 'user', id: 'u1' }, body: { content: JSON.stringify({ text: '最近澳储油需求吗？' }) } },
+          { message_id: 'm2', msg_type: 'text', create_time: String(matchMs + 30_000), sender: { sender_type: 'user', id: 'u2' }, body: { content: JSON.stringify({ text: '有，最近需求上涨约两成。' }) } },
+          { message_id: 'm3', msg_type: 'text', create_time: String(matchMs + 11 * 60_000), sender: { sender_type: 'user', id: 'u3' }, body: { content: JSON.stringify({ text: '午饭吃什么？' }) } },
+        ] } }) };
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
+
+    const [msg] = await searchMessages(USER_TOKEN, '澳储油需求', 3, { after: 3 });
+    if (!msg) throw new Error('expected one message result');
+    if (msg.matchText !== '最近澳储油需求吗？') throw new Error(`bad matchText: ${msg.matchText}`);
+    if (JSON.stringify(msg.afterTexts) !== JSON.stringify(['有，最近需求上涨约两成。'])) throw new Error(`bad afterTexts: ${JSON.stringify(msg.afterTexts)}`);
+    if (!msg.content.includes('[命中消息]') || !msg.content.includes('[后续回复1]')) throw new Error(`missing chat labels: ${msg.content}`);
+    if (msg.content.includes('午饭')) throw new Error('超出上下文时间窗的新话题不应混入');
+    if (msg.title !== '有，最近需求上涨约两成。') throw new Error(`展示标题没有使用实际回答: ${msg.title}`);
   });
 
   // ── Restore ────────────────────────────────────────────────────────────────

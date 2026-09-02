@@ -5,6 +5,8 @@ assert.equal(t.length, 32);
 assert.equal(s.getSession(t).openId, 'ou_1');
 s.updateTokens(t, { userAccessToken: 'u2', refreshToken: 'r2', expireAt: 2 });
 assert.equal(s.getSession(t).userAccessToken, 'u2');
+s.setRagConfig(t, { pageSize: 17 });
+assert.equal(s.getSession(t).rag.pageSize, 17);
 s.removeSession(t);
 assert.equal(s.getSession(t), null);
 console.log('session ok');

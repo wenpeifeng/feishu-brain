@@ -6,11 +6,39 @@
  * Tests askLLMStream and askLLMGeneral exports.
  */
 
-const { askLLMStream, askLLMGeneral } = require('../server/llm');
+const assert = require('assert');
+const { askLLMStream, askLLMGeneral, judgeRelevance, verifyRelevance, buildPrompt, planSearchQuery } = require('../server/llm');
 
 // --- Helpers ---
 
 const encoder = new TextEncoder();
+
+function test_buildPrompt_exposes_source_date_for_freshness() {
+  const prompt = buildPrompt('还有需求吗', [{
+    title: '澳洲光储组周报_2026/07/15',
+    content: 'PRD计划下周一评审',
+  }]);
+  assert.ok(prompt.includes('资料时间：2026/07/15'), '标题日期应进入模型上下文');
+  assert.ok(prompt.includes('PRD计划下周一'));
+  assert.ok(prompt.includes('按资料时间即2026-07-20'), '历史相对日期应确定性换算成绝对日期');
+  assert.ok(prompt.includes('原计划于2026-07-20'), '已过期计划应被明确标成历史计划');
+  console.log('✓ test_buildPrompt_exposes_source_date_for_freshness');
+}
+
+async function test_query_plan_keeps_generic_high_confidence_correction() {
+  const originalFetch = global.fetch;
+  const question = '云校流水线失败-' + Date.now();
+  try {
+    global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({
+      keywords: '云效 流水线 失败', correctedQuestion: question.replace('云校', '云效'), expansions: ['云效流水线'], confidence: 0.96,
+    }) } }] }) });
+    const plan = await planSearchQuery(question, PROVIDER);
+    assert.ok(plan.correctedQuestion.includes('云效'));
+    assert.deepEqual(plan.expansions, ['云效流水线']);
+    assert.equal(plan.confidence, 0.96);
+    console.log('✓ test_query_plan_keeps_generic_high_confidence_correction');
+  } finally { global.fetch = originalFetch; }
+}
 
 /**
  * Build a mock fetch response whose body is an async-iterable
@@ -80,16 +108,18 @@ const PROVIDER = {
 const PROVIDER_NO_KEY = { ...PROVIDER, apiKey: '' };
 
 // -------------------------
-// Test 1: askLLMStream yields content deltas, ignores reasoning_content
+// Test 1: askLLMStream yields typed answer/reasoning deltas
 // -------------------------
 async function test_askLLMStream_yields_content_deltas() {
   const originalFetch = global.fetch;
   try {
+    test_buildPrompt_exposes_source_date_for_freshness();
+    await test_query_plan_keeps_generic_high_confidence_correction();
     const chunks = sseChunks([
       { content: '你' },
-      { reasoning_content: '思考中...' },  // should be ignored
+      { reasoning_content: '思考中...' },
       { content: '好' },
-      { reasoning_content: '推理...' },     // should be ignored
+      { reasoning_content: '推理...' },
       { content: '！' },
     ]);
 
@@ -103,10 +133,13 @@ async function test_askLLMStream_yields_content_deltas() {
       results.push(delta);
     }
 
-    console.assert(
-      JSON.stringify(results) === JSON.stringify(['你', '好', '！']),
-      `Expected ['你', '好', '！'], got ${JSON.stringify(results)}`
-    );
+    assert.deepEqual(results, [
+      { type: 'answer', text: '你' },
+      { type: 'reasoning', text: '思考中...' },
+      { type: 'answer', text: '好' },
+      { type: 'reasoning', text: '推理...' },
+      { type: 'answer', text: '！' },
+    ]);
     console.log('✓ test_askLLMStream_yields_content_deltas');
   } finally {
     global.fetch = originalFetch;
@@ -157,10 +190,7 @@ async function test_askLLMGeneral_degrades_on_tools_error() {
     }
 
     console.assert(callCount === 2, `Expected 2 fetch calls, got ${callCount}`);
-    console.assert(
-      JSON.stringify(results) === JSON.stringify(['联网结果']),
-      `Expected ['联网结果'], got ${JSON.stringify(results)}`
-    );
+    assert.deepEqual(results, [{ type: 'answer', text: '联网结果' }]);
     console.log('✓ test_askLLMGeneral_degrades_on_tools_error');
   } finally {
     global.fetch = originalFetch;
@@ -187,10 +217,7 @@ async function test_askLLMGeneral_no_tools_when_websearch_false() {
     }
 
     console.assert(!capturedBody.tools, 'Should NOT have tools when webSearch=false');
-    console.assert(
-      JSON.stringify(results) === JSON.stringify(['普通回答']),
-      `Expected ['普通回答'], got ${JSON.stringify(results)}`
-    );
+    assert.deepEqual(results, [{ type: 'answer', text: '普通回答' }]);
     console.log('✓ test_askLLMGeneral_no_tools_when_websearch_false');
   } finally {
     global.fetch = originalFetch;
@@ -234,11 +261,88 @@ async function test_askLLMStream_handles_split_chunks() {
       results.push(delta);
     }
 
-    console.assert(
-      JSON.stringify(results) === JSON.stringify(['分块']),
-      `Expected ['分块'], got ${JSON.stringify(results)}`
-    );
+    assert.deepEqual(results, [{ type: 'answer', text: '分块' }]);
     console.log('✓ test_askLLMStream_handles_split_chunks');
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+// -------------------------
+// Test 6: 聊天判官收到结构化问答，长命中消息后的答案不能被 300 字截断
+// -------------------------
+async function test_chat_judge_keeps_answer_context() {
+  const originalFetch = global.fetch;
+  try {
+    const seenBodies = [];
+    global.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      seenBodies.push(body);
+      const isVerify = body.messages[0].content.includes('复核者');
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: isVerify
+          ? '[{"i":0,"ok":true}]'
+          : '[{"i":0,"score":3,"rank":88}]' } }] }),
+      };
+    };
+    const longMatch = '最近澳储油需求吗？' + '补充背景'.repeat(100);
+    const item = {
+      source: 'message',
+      text: `[命中消息] ${longMatch}\n[后续回复1] 有，最近需求上涨约两成。`,
+      matchText: longMatch,
+      afterTexts: ['有，最近需求上涨约两成。'],
+    };
+    const question = `最近澳储油需求吗-${Date.now()}`;
+    const judged = await judgeRelevance(question, [item], PROVIDER);
+    assert.deepEqual(judged, [3]);
+    assert.deepEqual(judged.ranks, [88]);
+    assert.deepEqual(await verifyRelevance(question, [item], PROVIDER), [true]);
+    for (const body of seenBodies) {
+      assert.equal(body.model, PROVIDER.model, '缓存身份不得污染发给模型API的model参数');
+      const prompt = body.messages[1].content;
+      assert.ok(prompt.includes('类型：CHAT'), '判官必须知道候选是聊天');
+      assert.ok(prompt.includes('有，最近需求上涨约两成'), '长问句后的答案必须完整送入判官');
+    }
+    console.log('✓ test_chat_judge_keeps_answer_context');
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+async function test_judge_failure_is_explicit() {
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
+    await assert.rejects(
+      () => judgeRelevance(`judge-outage-${Date.now()}`, [{ text: '粗召回噪音' }], PROVIDER),
+      /relevance judge unavailable/,
+    );
+    console.log('✓ test_judge_failure_is_explicit');
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+async function test_judge_batches_all_candidates_without_truncation() {
+  const originalFetch = global.fetch;
+  try {
+    let calls = 0;
+    global.fetch = async (_url, options) => {
+      calls++;
+      const body = JSON.parse(options.body);
+      const prompt = body.messages[1].content;
+      const count = (prompt.match(/^\[\d+\]$/gm) || []).length;
+      const response = Array.from({ length: count }, (_, i) => ({ i, score: 2, rank: 50 + i }));
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(response) } }] }) };
+    };
+    const question = `judge-batches-${Date.now()}`;
+    const items = Array.from({ length: 17 }, (_, i) => ({ text: `候选${i}` }));
+    const judged = await judgeRelevance(question, items, PROVIDER);
+    assert.equal(calls, 3, '默认每批8条，17条候选应并行拆成3批');
+    assert.deepEqual(judged, items.map(() => 2), '分批不得遗漏或改变候选顺序');
+    assert.equal(judged.ranks.length, items.length);
+    console.log('✓ test_judge_batches_all_candidates_without_truncation');
   } finally {
     global.fetch = originalFetch;
   }
@@ -254,6 +358,9 @@ async function test_askLLMStream_handles_split_chunks() {
     await test_askLLMGeneral_degrades_on_tools_error();
     await test_askLLMGeneral_no_tools_when_websearch_false();
     await test_askLLMStream_handles_split_chunks();
+    await test_chat_judge_keeps_answer_context();
+    await test_judge_failure_is_explicit();
+    await test_judge_batches_all_candidates_without_truncation();
     console.log('llm ok');
   } catch (err) {
     console.error('FAIL:', err);

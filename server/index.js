@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { handleRequest } = require('./router');
+const { start: startScheduler } = require('./scheduler');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -78,4 +79,5 @@ server.on('error', (err) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Feishu KB QA server running at http://${HOST}:${PORT}`);
+  startScheduler();
 });

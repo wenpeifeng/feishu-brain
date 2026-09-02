@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "qid": "q1",
+      "aHas": true,
+      "bHas": true,
+      "jA": 0,
+      "jB": 1
+    },
+    {
+      "qid": "q6",
+      "aHas": false,
+      "bHas": true,
+      "jA": 0,
+      "jB": 0
+    },
+    {
+      "qid": "q8",
+      "aHas": true,
+      "bHas": true,
+      "jA": 1,
+      "jB": 2
+    },
+    {
+      "qid": "q9",
+      "aHas": true,
+      "bHas": true,
+      "jA": 3,
+      "jB": 3
+    },
+    {
+      "qid": "q10",
+      "aHas": true,
+      "bHas": true,
+      "jA": 3,
+      "jB": 3
+    },
+    {
+      "qid": "q11",
+      "aHas": false,
+      "bHas": true,
+      "jA": 0,
+      "jB": 0
+    }
+  ],
+  "noisePairs": 2,
+  "hallucinate": 0
+}

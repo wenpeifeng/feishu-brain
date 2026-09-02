@@ -46,7 +46,7 @@ const FAKE_DOC_B = { title: '文档B', content: '' }; // sheet → no content
  * Build a fresh mocked rag module with custom feishu/llm behavior.
  * Each call returns a brand-new module instance with the injected mocks.
  */
-function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askLLMGeneralMock }) {
+function loadRagWithMocks({ searchDocsMock, searchMessagesMock, fetchDocMock, askLLMStreamMock, askLLMGeneralMock, judgeRelevanceMock, verifyRelevanceMock }) {
   // Resolve absolute paths so require.cache keys match
   const feishuPath = require.resolve('../server/feishu');
   const llmPath    = require.resolve('../server/llm');
@@ -64,8 +64,10 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
       exports: {
         searchDocs: searchDocsMock || (async () => FAKE_RESULTS),
         fetchDoc:   fetchDocMock   || (async (token, item) => item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B),
+        searchMessages: searchMessagesMock || (async () => []),
         enrichReferences: async (token, results) => results, // pass-through
         parseFeishuDocUrls: () => [], // 无粘贴链接
+        findAnchorBlock: async () => '',
       },
     };
 
@@ -74,8 +76,15 @@ function loadRagWithMocks({ searchDocsMock, fetchDocMock, askLLMStreamMock, askL
       id: llmPath, filename: llmPath, loaded: true,
       exports: {
         askLLMStream:   askLLMStreamMock   || (async function*() { yield { type: 'answer', text: '默认回答' }; }),
-        askLLMGeneral:  askLLMGeneralMock  || (async function*() { yield { type: 'answer', text: '默认联网' }; }),
-        extractKeywords: async (q) => q, // pass-through
+        askLLMGeneral:  askLLMGeneralMock  || (async function*() { yield { type: 'answer', text: '未找到相关文档' }; }),
+        planSearchQuery: async (q) => ({ keywords: q, correctedQuestion: '', expansions: [], confidence: 0 }),
+        classifyNeedsDoc: async () => true,
+        clarifyQuestion: async () => '',
+        condenseQuery: async q => q,
+        expandQueries: async () => [],
+        judgeRelevance: judgeRelevanceMock || (async (_q, items) => items.map(() => 3)),
+        verifyRelevance: verifyRelevanceMock || (async (_q, items) => items.map(() => true)),
+        detectConflict: async () => '',
       },
     };
 
@@ -204,40 +213,30 @@ async function runTests() {
     }
   });
 
-  // ── Test 4: webSearch=true → 走 askLLMGeneral 分支 ───────────────────────────
-  await check('webSearch=true 走 askLLMGeneral 分支', async () => {
+  // ── Test 4: webSearch=true → 走统一主管道，askLLMStream 带 webSearch=true ──────
+  // （不再有独立的 askLLMGeneral 分支：联网也经过检索/法官，参考只留相关文档）
+  await check('webSearch=true 走统一管道(askLLMStream带联网)', async () => {
     let streamCalled = false;
-    let generalCalled = false;
+    let streamWebSearch = null;
 
     const runRAGStream = loadRagWithMocks({
       searchDocsMock: async () => FAKE_RESULTS,
       fetchDocMock: async (userAccessToken, item) => item.type === 'docx' ? FAKE_DOC_A : FAKE_DOC_B,
-      askLLMStreamMock: async function*() {
+      askLLMStreamMock: async function* (question, docs, history, provider, webSearch) {
         streamCalled = true;
-        yield { type: 'answer', text: '文档问答' };
-      },
-      askLLMGeneralMock: async function*(question, history, provider, webSearch) {
-        generalCalled = true;
-        if (!webSearch) throw new Error('webSearch should be true');
+        streamWebSearch = webSearch;
         yield { type: 'answer', text: '联网回答' };
       },
+      askLLMGeneralMock: async function* () { throw new Error('askLLMGeneral 不应再被调用（已统一到主管道）'); },
     });
 
     const events = await collect(runRAGStream(USER, '联网问题', HISTORY, true, BASE_CONFIG));
 
-    if (streamCalled) throw new Error('askLLMStream should NOT be called for webSearch=true');
-    if (!generalCalled) throw new Error('askLLMGeneral should be called for webSearch=true');
-
-    // references must come before tokens
-    const refIdx = events.findIndex(e => e.type === 'references');
-    const firstTokenIdx = events.findIndex(e => e.type === 'token');
-    if (refIdx < 0) throw new Error('no references event');
-    if (refIdx < 0) throw new Error("missing references event");
-
-    const tokenEvs = events.filter(e => e.type === 'token');
-    if (tokenEvs.length === 0) throw new Error('no token events');
-    const combined = tokenEvs.map(e => e.delta).join('');
-    if (!combined.includes('联网回答')) throw new Error(`token "${combined}" doesn't include 联网回答`);
+    if (!streamCalled) throw new Error('askLLMStream 应被调用（统一管道）');
+    if (streamWebSearch !== true) throw new Error('askLLMStream 应收到 webSearch=true');
+    if (events.findIndex(e => e.type === 'references') < 0) throw new Error('no references event');
+    const combined = events.filter(e => e.type === 'token').map(e => e.delta).join('');
+    if (!combined.includes('联网回答')) throw new Error(`token "${combined}" 不含 联网回答`);
   });
 
   // ── Test 5: apiKey 缺失 → 转为 ⚠️ token，不崩溃 ─────────────────────────────
@@ -281,6 +280,109 @@ async function runTests() {
         throw new Error(`${call.fn} got wrong token: ${call.uaToken}`);
       }
     }
+  });
+
+  // ── Test 7: 已带正文的聊天不占用远程文档 readPool ────────────────────────────
+  await check('聊天候选不会占满 readPool 并挤掉文档', async () => {
+    const fetched = [];
+    const messages = Array.from({ length: 6 }, (_, i) => ({
+      index: i + 1,
+      title: `聊天${i + 1}`,
+      type: 'message',
+      token: `msg${i + 1}`,
+      source: 'message',
+      matchText: '澳储油需求',
+      afterTexts: ['需求上涨约两成'],
+      content: '[命中消息] 澳储油需求\n[后续回复1] 需求上涨约两成',
+      url: '', owner: '', editTime: '',
+    }));
+    const runRAGStream = loadRagWithMocks({
+      searchDocsMock: async () => [{ index: 1, title: '储油文档', type: 'docx', token: 'doc1', url: 'https://feishu.cn/docx/doc1' }],
+      searchMessagesMock: async () => messages,
+      fetchDocMock: async (_token, item) => { fetched.push(item.token); return { title: item.title, content: '澳储油需求上涨约一成' }; },
+      askLLMStreamMock: async function* () { yield { type: 'answer', text: '回答' }; },
+    });
+
+    await collect(runRAGStream(USER, '澳储油需求', HISTORY, false, { ...BASE_CONFIG, readPool: 1, retrievalOnly: true }));
+    if (!fetched.includes('doc1')) throw new Error(`文档在精排前被聊天挤掉，实际读取：${JSON.stringify(fetched)}`);
+  });
+
+  // ── Test 8: 生成上下文、参考和置信度必须使用同一组 Top K ────────────────
+  await check('Top K 同时约束生成上下文、参考和置信度', async () => {
+    const messages = Array.from({ length: 4 }, (_, i) => ({
+      index: i + 1,
+      title: `相关聊天${i + 1}`,
+      type: 'message', token: `topk-msg-${i + 1}`, source: 'message',
+      matchText: `澳储需求进展 ${i + 1}`,
+      afterTexts: [`第${i + 1}条有效回答`],
+      content: `[命中消息] 澳储需求进展 ${i + 1}\n[后续回复1] 第${i + 1}条有效回答`,
+      url: '', owner: '', editTime: '',
+    }));
+    let generatedDocs = null;
+    const runRAGStream = loadRagWithMocks({
+      searchDocsMock: async () => [],
+      searchMessagesMock: async () => messages,
+      askLLMStreamMock: async function* (_q, docs) {
+        generatedDocs = docs;
+        yield { type: 'answer', text: '回答 [1]' };
+      },
+    });
+
+    const events = await collect(runRAGStream(USER, '澳储需求进展', HISTORY, false, {
+      ...BASE_CONFIG, topK: 2, adaptiveEvidence: false, adversarial: false,
+    }));
+    const refs = events.find(e => e.type === 'references');
+    const conf = events.find(e => e.type === 'confidence');
+    if (!generatedDocs || generatedDocs.length !== 2) throw new Error(`生成实际收到 ${generatedDocs && generatedDocs.length} 条，期望 2 条`);
+    if (!refs || refs.references.length !== 2) throw new Error(`参考实际 ${refs && refs.references.length} 条，期望 2 条`);
+    if (!conf || conf.confidence.sources !== 2) throw new Error(`置信度来源数 ${conf && conf.confidence.sources}，期望 2`);
+  });
+
+  // ── Test 9: 命中聊天问句时，后续回答必须进入法官并成为证据 ────────────────
+  await check('澳储问句命中后，后续聊天回答进入法官与最终证据', async () => {
+    let judged = null;
+    const runRAGStream = loadRagWithMocks({
+      searchDocsMock: async () => [],
+      searchMessagesMock: async () => [{
+        index: 1, title: '澳储还有需求吗，最近', type: 'message', token: 'au-chat-1', source: 'message',
+        matchText: '澳储还有需求吗，最近', afterTexts: ['第二期部分需求已经启动，先借调资源。'],
+        content: '[命中消息] 澳储还有需求吗，最近\n[后续回复1] 第二期部分需求已经启动，先借调资源。', url: 'https://feishu.example/chat/1',
+      }],
+      judgeRelevanceMock: async (_q, items) => { judged = items; return items.map(() => 3); },
+    });
+    const events = await collect(runRAGStream(USER, '澳储还有需求吗？', HISTORY, false, { ...BASE_CONFIG, retrievalOnly: true, adversarial: false }));
+    const refs = events.find(e => e.type === 'references');
+    if (!judged || !judged[0] || judged[0].afterTexts[0].indexOf('第二期') < 0) throw new Error('法官没有看到问句后的回答');
+    if (!refs || refs.references.length !== 1 || refs.references[0].token !== 'au-chat-1') throw new Error('聊天回答未进入最终证据');
+  });
+
+  await check('法官同分时按证据质量排序，而不是按字面向量排序', async () => {
+    const messages = [
+      { index: 1, title: '字面相似但只提供局部线索', type: 'message', token: 'vague', source: 'message', matchText: '澳储还有需求吗', afterTexts: ['昨天的需求说明好像不涉及澳储'], content: '[命中消息] 澳储还有需求吗\n[后续回复1] 昨天的需求说明好像不涉及澳储', url: '' },
+      { index: 2, title: '直接回答二期需求', type: 'message', token: 'direct', source: 'message', matchText: '澳储项目进展', afterTexts: ['第二期部分需求已经启动'], content: '[命中消息] 澳储项目进展\n[后续回复1] 第二期部分需求已经启动', url: '' },
+    ];
+    const judge = async (_q, items) => { const s = items.map(() => 2); Object.defineProperty(s, 'ranks', { value: items.map(x => (x.afterTexts || []).join('').includes('已经启动') ? 60 : 95) }); return s; };
+    const runRAGStream = loadRagWithMocks({ searchDocsMock: async () => [], searchMessagesMock: async () => messages, judgeRelevanceMock: judge });
+    const events = await collect(runRAGStream(USER, '澳储还有需求吗？', HISTORY, false, { ...BASE_CONFIG, retrievalOnly: true, adversarial: false }));
+    const refs = events.find(e => e.type === 'references');
+    if (!refs || refs.references[0].token !== 'direct') throw new Error('直接答案没有排在字面相似线索之前');
+  });
+
+  await check('明确项目状态不因法官一次1分抖动被淘汰', async () => {
+    const messages = [{
+      index: 1, title: '澳储第二期需求已经启动', type: 'message', token: 'direct-state', source: 'message',
+      matchText: '澳储第二期需求已经启动', afterTexts: [],
+      content: '[命中消息] 澳储第二期需求已经启动，正在安排开发。', url: '',
+    }];
+    const judge = async (_q, items) => {
+      const scores = items.map(() => 1);
+      Object.defineProperty(scores, 'ranks', { value: items.map(() => 30) });
+      return scores;
+    };
+    const runRAGStream = loadRagWithMocks({ searchDocsMock: async () => [], searchMessagesMock: async () => messages, judgeRelevanceMock: judge });
+    const events = await collect(runRAGStream(USER, '澳储还有需求吗？', HISTORY, false, { ...BASE_CONFIG, retrievalOnly: true, adversarial: false }));
+    const refs = events.find(e => e.type === 'references');
+    if (!refs || refs.references[0].token !== 'direct-state') throw new Error('明确状态证据被法官抖动淘汰');
   });
 
   // ── summary ────────────────────────────────────────────────────────────────

@@ -8,11 +8,22 @@ assert.ok(PROVIDERS.find(p => p.id === 'kimi'), 'has kimi');
 assert.ok(PROVIDERS.find(p => p.id === 'agnes'), 'has agnes');
 assert.ok(!PROVIDERS.find(p => p.id === 'qwen'), 'qwen 已移除');
 
-// resolveProvider 带出 model/baseUrl；apiKey 只来自 config（无 env 兜底）
+// resolveProvider 带出 model/baseUrl；apiKey 优先来自 config
 const r = resolveProvider({ providerId: 'glm', apiKey: 'my-key' });
 assert.equal(r.model, 'glm-4-air');
 assert.equal(r.apiKey, 'my-key', 'apiKey 来自 config');
-assert.equal(resolveProvider({ providerId: 'glm' }).apiKey, '', '未填 key 时为空(无隐藏兜底)');
+
+// 未填 key 且无 DEFAULT_LLM_KEY → 空（无隐藏兜底）；有 DEFAULT_LLM_KEY → 仅对默认 provider 兜底
+{
+  const savedKey = process.env.DEFAULT_LLM_KEY, savedProv = process.env.DEFAULT_LLM_PROVIDER;
+  delete process.env.DEFAULT_LLM_KEY; delete process.env.DEFAULT_LLM_PROVIDER;
+  assert.equal(resolveProvider({ providerId: 'glm' }).apiKey, '', '无默认key时未填→空');
+  process.env.DEFAULT_LLM_PROVIDER = 'glm'; process.env.DEFAULT_LLM_KEY = 'sk-default';
+  assert.equal(resolveProvider({ providerId: 'glm' }).apiKey, 'sk-default', '默认provider兜底');
+  assert.equal(resolveProvider({ providerId: 'kimi' }).apiKey, '', '非默认provider不兜底(不把glm key给kimi)');
+  if (savedKey !== undefined) process.env.DEFAULT_LLM_KEY = savedKey; else delete process.env.DEFAULT_LLM_KEY;
+  if (savedProv !== undefined) process.env.DEFAULT_LLM_PROVIDER = savedProv; else delete process.env.DEFAULT_LLM_PROVIDER;
+}
 
 // 默认回退到第一个
 assert.equal(resolveProvider({}).id, 'glm');

@@ -8,7 +8,10 @@ const {
   deleteConversationOwned,
   addMessage,
   updateConversationTitleOwned,
+  sanitizePersistentConfig,
 } = require('../server/store');
+
+console.assert(JSON.stringify(sanitizePersistentConfig({ topK: 4, appSecret: 'secret', openaiApiKey: 'key' })) === JSON.stringify({ topK: 4 }), '持久化配置必须过滤密钥字段');
 
 let idA;
 
