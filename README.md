@@ -146,7 +146,7 @@ flowchart TB
 ### 第 2 步：配置并启动
 
 ```bash
-git clone https://github.com/<your-name>/feishu-brain.git
+git clone https://github.com/wenpeifeng/feishu-brain.git
 cd feishu-brain
 
 cp .env.example .env
