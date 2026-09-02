@@ -1,24 +1,38 @@
 {
-  "name": "feishu-kb-qa",
+  "name": "feishu-brain",
   "version": "1.0.0",
-  "description": "基于飞书知识库的 RAG 问答服务",
+  "description": "飞书大脑（Feishu Brain）—— 基于飞书的企业级 RAG 知识问答系统：按提问人本人权限实时检索文档、表格与聊天记录，答案带块级引用溯源",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "mock": "USE_MOCK=true node server/index.js",
-    "test": "node test/api.test.js"
+    "test": "node test/api.test.js",
+    "mineru:install": "bash scripts/mineru-local.sh install",
+    "mineru:start": "bash scripts/mineru-local.sh start",
+    "mineru:stop": "bash scripts/mineru-local.sh stop",
+    "mineru:status": "bash scripts/mineru-local.sh status",
+    "mineru:logs": "bash scripts/mineru-local.sh logs"
   },
   "keywords": [
     "feishu",
     "lark",
     "rag",
-    "knowledge-base"
+    "knowledge-base",
+    "knowledge-management",
+    "llm",
+    "ai",
+    "qa",
+    "chatbot",
+    "enterprise-search"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "wenpeifeng",
+  "license": "MIT",
   "type": "commonjs",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.2.67"
   }
 }

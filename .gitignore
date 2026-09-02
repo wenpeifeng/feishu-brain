@@ -2,3 +2,19 @@ node_modules
 data
 .env
 *.log
+.DS_Store
+.idea/
+
+# 个人对外/求职材料与截图，不随开源仓库分发
+docs/job/
+
+# 真实评测数据：含真实租户域名、文档标题、open_id 与人名，仅本地保留
+test/corpus.json
+test/results.json
+test/eval/
+test/eval-*.js
+test/live-rank-australia.js
+
+# 本地图资源备份与未引用的测试图片
+public/assets/gzh-qr.png.bak-fuzzy
+public/assets/test.png

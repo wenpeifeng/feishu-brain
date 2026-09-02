@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  feishu-kb-qa:
+  feishu-brain:
     build: .
     ports:
       - "3000:3000"
@@ -10,9 +10,8 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=3000
-      # 可选：在启动时配置 lark-cli 和 LLM，或在 Web UI 中配置
-      # - LARK_CLI_PATH=lark-cli
-      # - LARK_IDENTITY=user
-      # - OPENAI_API_KEY=your-key
-      # - OPENAI_BASE_URL=https://api.openai.com/v1
-      # - LLM_MODEL=gpt-4o-mini
+      # 飞书应用凭证与 LLM Key 建议通过 .env 提供（见 .env.example），
+      # 或登录后在 Web 界面「设置」里按用户填写（存会话内存，不落盘）。
+      # - FEISHU_APP_ID=cli_xxx
+      # - FEISHU_APP_SECRET=xxx
+      # - APP_BASE_URL=https://kb.yourco.com
