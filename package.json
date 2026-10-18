@@ -1,18 +1,21 @@
 {
   "name": "feishu-brain",
   "version": "1.0.0",
-  "description": "飞书大脑（Feishu Brain）—— 基于飞书的企业级 RAG 知识问答系统：按提问人本人权限实时检索文档、表格与聊天记录，答案带块级引用溯源",
+  "description": "飞书大脑（Feishu Brain）—— 按登录人飞书权限检索资料、结合自建知识库生成带证据回答的单机 RAG Web 应用",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "mock": "USE_MOCK=true node server/index.js",
     "test": "node test/api.test.js",
-    "mineru:install": "bash scripts/mineru-local.sh install",
-    "mineru:start": "bash scripts/mineru-local.sh start",
-    "mineru:stop": "bash scripts/mineru-local.sh stop",
-    "mineru:status": "bash scripts/mineru-local.sh status",
-    "mineru:logs": "bash scripts/mineru-local.sh logs"
+    "test:all": "node scripts/test-all.js",
+    "service:start": "bash script/sh/start-all.sh",
+    "service:status": "bash script/sh/status-all.sh",
+    "service:stop": "bash script/sh/stop-all.sh",
+    "mineru:install": "bash script/sh/mineru-local.sh install",
+    "mineru:start": "bash script/sh/mineru-local.sh start",
+    "mineru:stop": "bash script/sh/mineru-local.sh stop",
+    "mineru:status": "bash script/sh/mineru-local.sh status",
+    "mineru:logs": "bash script/sh/mineru-local.sh logs"
   },
   "keywords": [
     "feishu",

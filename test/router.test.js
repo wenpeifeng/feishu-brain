@@ -121,6 +121,19 @@ function dispatch(req, res) {
 const cleanup = [];
 
 async function run() {
+  // ─── 健康检查：无需登录且不返回配置/密钥 ──────────────────────────────────
+  {
+    const req = mockReq({ method: 'GET', url: '/api/health' });
+    const res = mockRes();
+    await dispatch(req, res);
+    assert.equal(res.statusCode, 200, '健康检查应返回 200');
+    assert.equal(res.json.ok, true);
+    assert.equal(res.json.service, 'feishu-brain');
+    assert.equal(typeof res.json.uptimeSeconds, 'number');
+    assert.strictEqual(res.json.config, undefined, '健康检查不得暴露配置');
+    console.log('  ✓ /api/health 无需登录且不暴露配置');
+  }
+
   // ─── 测试 1：无 token 访问 /api/conversations → 401 ─────────────────────────
   {
     const req = mockReq({ method: 'GET', url: '/api/conversations' });

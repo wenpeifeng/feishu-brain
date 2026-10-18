@@ -1,17 +1,20 @@
-version: '3.8'
-
 services:
   feishu-brain:
     build: .
+    env_file:
+      - path: .env
+        required: false
     ports:
-      - "3000:3000"
+      - "${FEISHU_BRAIN_HOST_PORT:-3000}:3000"
     volumes:
       - ./data:/app/data
     environment:
-      - HOST=0.0.0.0
-      - PORT=3000
-      # 飞书应用凭证与 LLM Key 建议通过 .env 提供（见 .env.example），
-      # 或登录后在 Web 界面「设置」里按用户填写（存会话内存，不落盘）。
-      # - FEISHU_APP_ID=cli_xxx
-      # - FEISHU_APP_SECRET=xxx
-      # - APP_BASE_URL=https://kb.yourco.com
+      HOST: 0.0.0.0
+      PORT: 3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped

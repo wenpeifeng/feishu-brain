@@ -3,3 +3,5 @@ data
 .git
 .env
 *.log
+.run
+logs

@@ -254,6 +254,16 @@ async function handleRequest(req, res) {
 
   setCORSHeaders(res);
 
+  // 无鉴权、无敏感信息的进程存活检查，供本项目启停脚本和容器健康检查使用。
+  if (url.pathname === '/api/health' && req.method === 'GET') {
+    json(res, {
+      ok: true,
+      service: 'feishu-brain',
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+    return;
+  }
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();

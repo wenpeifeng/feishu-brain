@@ -68,9 +68,8 @@ const server = http.createServer(async (req, res) => {
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n❌ 端口 ${PORT} 已被占用，服务无法启动。`);
-    console.error(`   可能是已有一个实例在跑。解决办法二选一：`);
-    console.error(`   1) 关掉占用它的进程：  lsof -ti:${PORT} | xargs kill -9`);
-    console.error(`   2) 换个端口启动：      PORT=3001 npm start\n`);
+    console.error('   为避免误杀其他程序，请先运行 script/sh/status-all.sh 确认占用者。');
+    console.error('   如果是本项目受管实例，请运行 script/sh/stop-all.sh；也可以修改 .env 中的 PORT。\n');
     process.exit(1);
   }
   console.error('服务启动失败：', err.message);

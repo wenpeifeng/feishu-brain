@@ -2,6 +2,8 @@ node_modules
 data
 .env
 *.log
+logs/
+.run/
 .DS_Store
 .idea/
 
